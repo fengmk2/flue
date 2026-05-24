@@ -20,7 +20,7 @@ import { http, type FlueContext } from '@flue/runtime';
 export const channels = [http()];
 
 export async function run(ctx: FlueContext) {
-	ctx.log.info('hello agent starting', { instanceId: ctx.id });
+	ctx.log.info('hello workflow starting', { instanceId: ctx.id });
 	// No model call needed for the success case — this keeps the
 	// example runnable without an ANTHROPIC_API_KEY when you just
 	// want to verify the Sentry wiring.

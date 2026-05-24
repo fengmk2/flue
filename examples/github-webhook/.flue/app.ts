@@ -11,7 +11,7 @@ observe((event) => {
 	if (event.type === 'agent_end') {
 		console.log(`[github-webhook-example] agent_end ${event.dispatchId ?? event.instanceId ?? ''}`);
 	}
-	if (event.type === 'error') {
+	if (event.type === 'log' && event.level === 'error') {
 		console.log(`[github-webhook-example] error ${event.message}`);
 	}
 });
