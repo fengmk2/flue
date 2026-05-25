@@ -43,7 +43,7 @@
 		"enabled": false
 	},
 	"files": {
-		"includes": ["**", "!apps/www"]
+		"includes": ["**", "!apps/www", "!apps/docs/**/*.astro"]
 	},
 	"overrides": [
 		{

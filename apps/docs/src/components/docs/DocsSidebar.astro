@@ -1,0 +1,16 @@
+---
+import type { DocsNavGroup } from '../../lib/docs-navigation';
+import DocsSidebarGroup from './DocsSidebarGroup.astro';
+
+interface Props {
+	groups: DocsNavGroup[];
+	currentSlug: string;
+	mobile?: boolean;
+}
+
+const { groups, currentSlug, mobile = false } = Astro.props;
+---
+
+<nav class:list={[mobile ? 'static' : 'sticky top-[calc(var(--docs-header-height)+var(--docs-aside-top))]']} aria-label="Documentation navigation">
+	{groups.map((group) => <DocsSidebarGroup group={group} currentSlug={currentSlug} mobile={mobile} />)}
+</nav>

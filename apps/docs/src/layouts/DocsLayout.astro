@@ -1,0 +1,67 @@
+---
+import type { MarkdownHeading } from 'astro';
+import DocsHeader from '../components/docs/DocsHeader.astro';
+import DocsSidebar from '../components/docs/DocsSidebar.astro';
+import DocsTableOfContents from '../components/docs/DocsTableOfContents.astro';
+import MobileDocsNavigation from '../components/docs/MobileDocsNavigation.astro';
+import { getDocsSection } from '../lib/docs-navigation';
+import '../styles/global.css';
+
+interface Props {
+	title: string;
+	description?: string;
+	currentSlug: string;
+	headings: MarkdownHeading[];
+	showTableOfContents?: boolean;
+}
+
+const {
+	title,
+	description,
+	currentSlug,
+	headings,
+	showTableOfContents = true,
+} = Astro.props;
+const tableOfContents = headings.filter((heading) => heading.depth === 2 || heading.depth === 3);
+const currentSection = getDocsSection(currentSlug);
+---
+
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+		<meta name="generator" content={Astro.generator} />
+		<meta name="theme-color" content="#ffffff" />
+		<meta name="description" content={description ?? 'Flue framework documentation.'} />
+		<title>{title} | Flue</title>
+		<link rel="preconnect" href="https://fonts.googleapis.com" />
+		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+		<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+	</head>
+	<body>
+		<a class="fixed left-4 -top-16 z-[100] rounded-lg bg-blue-500 px-3 py-2 text-white focus:top-4" href="#main-content">Skip to content</a>
+		<DocsHeader currentSlug={currentSlug} />
+		<MobileDocsNavigation groups={currentSection.groups} currentSlug={currentSlug} sectionTitle={currentSection.title} />
+		<div class="mx-auto grid min-h-[calc(100vh-var(--docs-header-height))] w-[min(100%,var(--docs-frame-width))] grid-cols-[254px_minmax(0,820px)_14.75rem] max-2xl:grid-cols-[232px_minmax(0,1fr)] max-docs-desktop:block">
+			<aside class="border-r border-docs-border pt-[var(--docs-aside-top)] pr-8 pb-8 pl-5 max-docs-desktop:hidden">
+				<DocsSidebar groups={currentSection.groups} currentSlug={currentSlug} />
+			</aside>
+			<main id="main-content" class="min-w-0 pt-12 px-[clamp(2.6rem,4vw,4.45rem)] pb-14 max-docs-desktop:pt-8 max-docs-desktop:px-4 max-docs-desktop:pb-10">
+				<article class="mx-auto max-w-175">
+					<header class="mb-7">
+						<h1 class="m-0 mb-3 text-4xl font-semibold leading-tight tracking-tight text-gray-950 max-docs-desktop:text-3xl">{title}</h1>
+						{description && <p class="m-0 text-base leading-relaxed text-docs-muted">{description}</p>}
+					</header>
+					<div class="docs-content">
+						<slot />
+					</div>
+				</article>
+			</main>
+			<aside class="pt-[var(--docs-aside-top)] pr-2 pb-8 pl-7 max-2xl:hidden">
+				{showTableOfContents && <DocsTableOfContents headings={tableOfContents} />}
+			</aside>
+		</div>
+	</body>
+</html>

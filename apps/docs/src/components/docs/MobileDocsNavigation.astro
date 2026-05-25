@@ -1,0 +1,24 @@
+---
+import DocsSectionLink from './DocsSectionLink.astro';
+import DocsSidebar from './DocsSidebar.astro';
+import MobileMenuToggle from './MobileMenuToggle.astro';
+import { docsSections, type DocsNavGroup } from '../../lib/docs-navigation';
+
+interface Props {
+	groups: DocsNavGroup[];
+	currentSlug: string;
+	sectionTitle: string;
+}
+
+const { groups, currentSlug, sectionTitle } = Astro.props;
+---
+
+<details class="group hidden max-docs-desktop:block max-docs-desktop:border-b max-docs-desktop:border-docs-border">
+	<MobileMenuToggle sectionTitle={sectionTitle} />
+	<div class="border-t border-docs-border py-3 px-4">
+		<nav class="mb-3 flex gap-4 border-b border-docs-border pt-0.5 pb-3" aria-label="Documentation sections">
+			{docsSections.map((section) => <DocsSectionLink section={section} active={section.title === sectionTitle} mobile />)}
+		</nav>
+		<DocsSidebar groups={groups} currentSlug={currentSlug} mobile />
+	</div>
+</details>

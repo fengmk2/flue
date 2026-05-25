@@ -1,0 +1,19 @@
+---
+import { docsHref, type DocsNavItem } from '../../lib/docs-navigation';
+
+interface Props {
+	item: DocsNavItem;
+	currentSlug: string;
+}
+
+const { item, currentSlug } = Astro.props;
+const active = item.slug === currentSlug;
+---
+
+<a
+	class:list={['block py-1.5 text-sm font-normal leading-snug', active ? 'font-medium text-blue-600' : 'text-gray-600 hover:text-gray-950']}
+	href={docsHref(item.slug)}
+	aria-current={active ? 'page' : undefined}
+>
+	{item.title}
+</a>
