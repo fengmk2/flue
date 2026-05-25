@@ -61,7 +61,7 @@ export async function run({ init, payload }: FlueContext) {
 A few things to note:
 
 - **`channels = [http()]`** — This workflow is invoked via HTTP. Flue creates a route for it automatically.
-- **`createAgent(...)` + `init(agent)`** — Created agents declare model and sandbox configuration; workflows initialize them when needed. `init(agent)` fails unless its created agent config provides a model, sets `model: false`, or supplies a profile with a model. By default, Flue gives initialized agents a virtual sandbox powered by [just-bash](https://github.com/vercel-labs/just-bash). No container needed.
+- **`createAgent(...)` + `init(agent)`** — Created agents declare model and sandbox configuration; workflows initialize them when needed. `init(agent)` fails unless its created agent config provides a model, sets `model: false`, or supplies a profile with a model. By default, Flue gives initialized agents a virtual sandbox powered internally by [just-bash](https://github.com/vercel-labs/just-bash). No container or application `just-bash` dependency is needed unless your own source imports `just-bash` to customize the sandbox.
 - **Schemas** — The [Valibot](https://valibot.dev) schema defines the expected output shape. Flue parses the agent's response and returns it on `response.data`, fully typed.
 
 ### 3. Add your API key
@@ -171,7 +171,7 @@ Focus on the key points and keep it to 2-3 sentences.
 
 **`AGENTS.md`** at the root of the sandbox is the agent's system prompt — it provides global context about the project.
 
-Call a skill from your agent:
+Call a workspace-discovered skill from your agent:
 
 ```typescript
 import * as v from 'valibot';
@@ -181,6 +181,27 @@ const { data } = await session.skill('summarize', {
   result: v.object({ summary: v.string() }),
 });
 ```
+
+### Packaging imported skills
+
+For source-owned skill dependencies, import `SKILL.md` statically with an import attribute. The imported value is a lightweight `SkillReference`; Vite validates the Agent Skills frontmatter and packages the complete permitted skill directory into the Node build.
+
+```typescript
+import { createAgent } from '@flue/runtime';
+import summarize from '../skills/summarize/SKILL.md' with { type: 'skill' };
+
+const reporter = createAgent(() => ({
+  model: 'anthropic/claude-sonnet-4-6',
+  skills: [summarize],
+}));
+
+const harness = await init(reporter);
+const session = await harness.session();
+await session.skill('summarize');
+// Direct activation is also supported: await session.skill(summarize);
+```
+
+Registered imported references make their packaged supporting files readable during the agent's operations; directly activated references scope those files to that skill operation. Importing a reference without registering or activating it does not expose its files to ordinary prompts. Permitted supporting files can live anywhere under the skill directory. Files likely to contain secrets or private keys reject the build, including `.env*`, `.dev.vars*`, credential/key files, `.aws/`, `.ssh/`, and `.gnupg/`.
 
 ## Using the local sandbox
 

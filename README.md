@@ -338,9 +338,25 @@ export default {
 };
 ```
 
+### Imported Agent Skills
+
+Workspace skills at `<cwd>/.agents/skills/<name>/SKILL.md` are discovered at runtime and activated by name with `session.skill('name')`. Static skill imports are packaged build dependencies:
+
+```ts
+import review from '../skills/review/SKILL.md' with { type: 'skill' };
+
+const agent = createAgent(() => ({ model: 'anthropic/claude-sonnet-4-6', skills: [review] }));
+const harness = await init(agent);
+const session = await harness.session();
+await session.skill('review');
+// Or activate an imported reference directly: await session.skill(review);
+```
+
+The static import exposes a lightweight `SkillReference`, not skill contents. Vite validates the spec-compliant `SKILL.md` and packages every permitted supporting file in its skill directory, not only `scripts/`, `references/`, and `assets/`. Packaged files become readable for direct reference activation and for operations on an agent that registers the reference in `skills`; an unregistered import alone does not expose its contents to ordinary prompts. Files likely to contain secrets or private keys, including `.env*`, `.dev.vars*`, credential files, key files, `.aws/`, `.ssh/`, and `.gnupg/`, reject the build rather than being deployed. Keep credentials outside skill directories.
+
 ### Custom Virtual Sandboxes
 
-For most agents, use the built-in virtual sandbox or `sandbox: local()` (Node target only). If you need to customize just-bash directly, pass a Bash factory. The factory must return a fresh Bash-like runtime each time; share the filesystem object in the closure to persist files across sessions and prompts.
+For most agents, use the built-in virtual sandbox or `sandbox: local()` (Node target only). The generated default sandbox is supplied by `@flue/runtime`; applications do not declare `just-bash` unless authored application code imports it directly. If you need to customize just-bash directly, add `just-bash` as an application dependency and pass a Bash factory. The factory must return a fresh Bash-like runtime each time; share the filesystem object in the closure to persist files across sessions and prompts.
 
 ```ts
 import { Bash, InMemoryFs } from 'just-bash';

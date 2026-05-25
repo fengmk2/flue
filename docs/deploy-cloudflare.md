@@ -58,7 +58,7 @@ export async function run({ init, payload }: FlueContext) {
 A few things to note:
 
 - **`channels = [http()]`** — This workflow is invoked via HTTP. Flue creates a workflow route for it automatically.
-- **`createAgent(...)` + `init(agent)`** — Created agents declare model and sandbox configuration; workflows initialize them only when needed. `init(agent)` fails unless its created agent config provides a model, sets `model: false`, or supplies a profile with a model. By default, Flue gives every agent a virtual sandbox powered by [just-bash](https://github.com/vercel-labs/just-bash). No container needed.
+- **`createAgent(...)` + `init(agent)`** — Created agents declare model and sandbox configuration; workflows initialize them only when needed. `init(agent)` fails unless its created agent config provides a model, sets `model: false`, or supplies a profile with a model. By default, Flue gives every agent a virtual sandbox powered internally by [just-bash](https://github.com/vercel-labs/just-bash). No container or application `just-bash` dependency is needed unless your own source imports `just-bash` to customize the sandbox.
 - **Schemas** — The [Valibot](https://valibot.dev) schema defines the expected output shape. Flue parses the agent's response and returns it on `response.data`, fully typed.
 
 ### 3. Build and deploy
@@ -447,7 +447,28 @@ You are a helpful assistant working on the my-project codebase.
 Use the project's existing patterns and conventions.
 ```
 
-Call a skill from your agent:
+### Packaging imported skills
+
+For deployed source-owned skills, import `SKILL.md` statically with an import attribute. Both Node and Cloudflare use the shared Vite authored-module graph; the import becomes a lightweight `SkillReference`, while the complete permitted skill directory is packaged for lazy reads.
+
+```typescript
+import { createAgent } from '@flue/runtime';
+import greet from '../skills/greet/SKILL.md' with { type: 'skill' };
+
+const greeter = createAgent(() => ({
+  model: 'anthropic/claude-sonnet-4-6',
+  skills: [greet],
+}));
+
+const harness = await init(greeter);
+const session = await harness.session();
+await session.skill('greet');
+// Direct activation is also supported: await session.skill(greet);
+```
+
+Registered imported references make packaged supporting files readable during the agent's operations; directly activated references scope those files to that skill operation. Merely importing an unregistered reference does not expose its files to ordinary prompts. Permitted supporting files can live anywhere in the skill directory. Files likely to contain secrets or private keys reject the build, including `.env*`, `.dev.vars*`, credential/key files, `.aws/`, `.ssh/`, and `.gnupg/`.
+
+Call a workspace-discovered skill from your agent:
 
 ```typescript
 const { data } = await session.skill('greet', {

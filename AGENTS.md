@@ -27,6 +27,7 @@ Use `harness` as the variable name for the return value of `init()`. Agents have
 - `packages/cli/` — CLI + build/dev tooling (`@flue/cli`). Owns `flue dev`/`run`/`build`/`init`/`add`/`logs`, the shared Vite build graph and target integration, topology discovery, env-file loading, and the `flue.config.ts` resolver. Eventually rolls up into the `flue` npm package; for now `defineConfig` is imported via `@flue/cli/config`.
 - `examples/hello-world/` — Test root with example agents covering the runtime's surfaces.
 - `examples/cloudflare/` — Test root for Cloudflare-specific features (Workers AI binding, etc.).
+- `examples/imported-skill/` — Copyable packaged `SkillReference` example and packed-package release fixture.
 
 ## Building
 
@@ -69,6 +70,10 @@ export default defineConfig({
 
 Relative `root` / `output` values resolve against the directory containing the config file (Vite-style: the config file's dir IS the project root). The config is loaded via Node's native TS support (Node ≥ 22.18).
 
+### Skills
+
+Workspace skills at `<cwd>/.agents/skills/<name>/SKILL.md` are discovered lazily at runtime and activated with `session.skill('name')`. Authored modules can instead import a spec-compliant `SKILL.md` directory with `with { type: 'skill' }`; Vite packages the complete permitted directory and exposes a `SkillReference`. Activate it directly with `session.skill(reference)`, or register it in `skills: [reference]` and activate by name. Imported skill directories must not contain credentials/private keys; sensitive paths reject builds.
+
 ### `flue dev`
 
 Default port: `3583` ("FLUE" on a phone keypad). Override with `--port`.
@@ -80,7 +85,7 @@ node ../../packages/cli/bin/flue.mjs dev --target node
 node ../../packages/cli/bin/flue.mjs dev --target cloudflare
 ```
 
-For `--target cloudflare`, the project must have `wrangler` available (it's a peer dependency of `@flue/cli`).
+For `--target cloudflare`, the project must have `wrangler` available (it's a peer dependency of `@flue/cli`). Cloudflare local development uses the official Vite/workerd path plus `.dev.vars`/`.env` and `CLOUDFLARE_ENV`; `--env <path>` is Node-only.
 
 ### `flue run`
 
