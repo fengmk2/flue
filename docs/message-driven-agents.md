@@ -5,7 +5,7 @@ Flue has two execution products:
 - **Workflows return results.** Use workflows for finite request/result jobs.
 - **Agents receive messages.** Use agents for addressable instances that may receive many inputs over time.
 
-This guide covers message-driven agents, direct attached surfaces, and authored inbound channel applications. Channel support is inbound-only today. Flue does not automatically post replies, reactions, cards, or issue comments after an agent processes an input. Future outward effects should happen through explicit tools.
+This guide covers message-driven agents, direct attached surfaces, and application-owned ingress that asynchronously dispatches input. Flue does not automatically post replies, reactions, cards, or issue comments after an agent processes an input. Outward effects should happen through explicit tools.
 
 ## Agent Model
 
@@ -18,10 +18,9 @@ The important runtime concepts are:
 - **Created agent**: runtime initializer created with `createAgent(...)`.
 - **Agent instance**: durable actor identified by `{ agentName, instanceId }`.
 - **Session**: isolated conversation/context stream inside one instance.
-- **Channel event**: normalized inbound provider event emitted by a channel adapter.
-- **Dispatch**: one structured input accepted for one target agent instance/session.
+- **Dispatched input**: one structured input accepted for one target agent instance/session.
 
-Agent modules default-export `createAgent(...)` so the runtime can initialize an instance when messages arrive. For provider events, they import a channel and register top-level `channel.on(...)` listeners.
+Agent modules default-export `createAgent(...)` so the runtime can initialize an instance when messages arrive. Application routes and integration handlers may call `dispatch(...)` for asynchronous delivery to an agent session.
 
 ## Direct Attached Surfaces
 
@@ -47,7 +46,7 @@ Direct delivery:
 
 - targets one explicit agent module and instance id
 - initializes the instance through its default `createAgent(...)` export
-- bypasses channel listeners
+- bypasses application-owned asynchronous ingress logic
 - bypasses `dispatch(...)`
 - can stream runtime events with HTTP `Accept: text/event-stream` or a WebSocket connection
 
@@ -101,80 +100,45 @@ await socket.prompt('Continue', { session: 'thread:1' });
 socket.close();
 ```
 
-## Authored Channels
+## Application-Owned Ingress
 
-Provider adapters are discovered from `.flue/channels/*` or `channels/*`. A channel owns a Hono application, parses and verifies its transport input, and emits normalized typed events. Its application is mounted below `/channels/:name/*` through `flue()`:
+Use a custom `app.ts` or integration module for provider webhooks and other event sources. Application code owns authentication, payload parsing, provider-specific behavior, and selection of the target agent instance/session before calling `dispatch(...)`.
 
 ```ts
-// .flue/channels/github.ts
-import { defineChannel } from '@flue/runtime';
 import { Hono } from 'hono';
-
-interface GitHubEvents {
-  issues: { deliveryId: string; payload: Record<string, any> };
-}
-interface GitHubThread {
-  channel: 'github';
-  deliveryId: string;
-}
+import { flue } from '@flue/runtime/app';
+import { dispatch } from '@flue/runtime';
+import triage from './agents/triage.ts';
 
 const app = new Hono();
-const github = defineChannel<GitHubEvents, GitHubThread>({ app });
 
-app.post('/events', async (c) => {
+app.post('/webhooks/github', async (c) => {
   const event = await verifyAndParseGitHubWebhook(c.req.raw);
-  const result = await github.emit('issues', {
-    event,
-    thread: { channel: 'github', deliveryId: event.deliveryId },
-  });
-  return c.json({ accepted: true, ...result }, 202);
-});
-
-export default github;
-```
-
-Agent modules import that singleton and own event interest and routing:
-
-```ts
-// .flue/agents/github-triage.ts
-import { createAgent, defineAgentProfile, dispatch } from '@flue/runtime';
-import github from '../channels/github.ts';
-
-const triage = defineAgentProfile({
-  model: 'anthropic/claude-haiku-4-5',
-  instructions: 'You triage inbound GitHub webhook events.',
-});
-const agent = createAgent(() => ({ profile: triage }));
-
-github.on('issues', async ({ event }) => {
   const repository = event.payload.repository?.full_name;
   const issue = event.payload.issue?.number;
-  if (typeof repository !== 'string' || typeof issue !== 'number') return;
+  if (typeof repository !== 'string' || typeof issue !== 'number') return c.json({ accepted: false }, 202);
 
-  await dispatch(agent, {
+  const receipt = await dispatch(triage, {
     id: `repo:${repository}`,
     session: `issue:${issue}`,
     input: { type: 'github.issue', deliveryId: event.deliveryId },
   });
+  return c.json(receipt, 202);
 });
 
-export default agent;
+app.route('/', flue());
+export default app;
 ```
 
-Channel event delivery:
+Application-owned ingress:
 
-- invokes registered `channel.on(...)` listeners for that typed event
-- lets each listener ignore, transform, or explicitly `dispatch(...)` work
-- acknowledges webhook admission before model processing completes
+- may ignore, transform, or explicitly `dispatch(...)` accepted work
+- can acknowledge webhook admission before model processing completes
 - does not imply any outbound provider action
-
-## `channel.on(...)`
-
-`channel.on(...)` is the agent-owned routing hook for provider events emitted by an authored channel application. It should filter events, extract references, choose a target instance/session, and shape narrow structured input for the agent.
 
 ## `dispatch(...)`
 
-Use `dispatch(...)` inside a channel listener to admit structured input into an agent session:
+Use `dispatch(...)` from application logic to admit structured input into an agent session:
 
 ```ts
 const receipt = await dispatch({
@@ -228,24 +192,15 @@ For persistent agents, initialization is scoped only by stable `id`; message pay
 - `cwd`: session context root
 - `persist`: persistence control
 
-Dynamic per-event routing belongs in `channel.on(...)` before calling `dispatch(...)`.
+Dynamic per-event routing belongs in application ingress logic before calling `dispatch(...)`.
 
-## GitHub Webhooks
+## Provider Event Routing
 
-See `examples/github-webhook/.flue/channels/github.ts` for an authored GitHub adapter that verifies `X-Hub-Signature-256`, parses inbound payloads, and emits typed events. It is discovered and mounted at:
-
-```txt
-POST /channels/github/events
-```
-
-The example agent imports that channel, registers `github.on(...)` listeners, and explicitly dispatches accepted work. Set `GITHUB_WEBHOOK_SECRET` to enable signature verification.
-
-## Cross-Channel Routing
-
-A channel listener can dispatch zero, one, or many inputs, including to another agent module:
+An application route can dispatch zero, one, or many inputs, including to another agent module:
 
 ```ts
-discord.on('message.created', async ({ event }) => {
+app.post('/webhooks/discord', async (c) => {
+  const event = await verifyAndParseDiscordWebhook(c.req.raw);
   await Promise.all([
     dispatch(moderationAgent, {
       id: `guild:${event.guildId}`,
@@ -258,14 +213,13 @@ discord.on('message.created', async ({ event }) => {
       input: { type: 'audit.delivery_seen', eventId: event.id },
     }),
   ]);
+  return c.json({ accepted: true }, 202);
 });
 ```
 
-The case/session model is application logic. For example, a moderation agent may choose `session = case:<caseId>` so Discord evidence and Google Chat reviewer discussion route into the same session.
+The case/session model is application logic. For example, a moderation agent may choose `session = case:<caseId>` so evidence from multiple provider integrations routes into the same session.
 
 ## Current Limitations
-
-- Authored channel applications are inbound-only.
 - There is no universal reply/thread abstraction yet.
 - Provider retries may produce duplicate events; preserve provider ids in your input if idempotency matters.
 - WebSocket clients should use the published SDK/protocol surface. Configure SDK `websocketBasePath` for custom-mounted socket routes and `websocketUrl` for URL-carried or signed handshake authentication.

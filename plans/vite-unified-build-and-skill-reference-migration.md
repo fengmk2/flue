@@ -22,7 +22,7 @@ Where those documents conflict with this plan on build direction or imported-ski
 Flue will drive toward the following final architecture:
 
 1. **Vite is the one authored application graph for both supported deployment targets.**
-   - Application modules include agents, workflows, channels, app modules, imported helpers, and statically imported Agent Skills.
+   - Application modules include agents, workflows, app modules, imported helpers, and statically imported Agent Skills.
    - Node and Cloudflare may produce different deployment artifacts, but they must use the same authored-module semantics and shared Flue Vite plugins.
 
 2. **Cloudflare uses the official `@cloudflare/vite-plugin` integration.**
@@ -157,7 +157,7 @@ Required semantics:
 
 ```txt
 Project source tree
-  agents/ | workflows/ | channels/ | app.ts | skills/
+  agents/ | workflows/ | app.ts | skills/
                          │
                          ▼
              Flue discovery of topology
@@ -494,7 +494,7 @@ These rules govern implementation sequencing and review acceptance.
    - A releasable/mergeable end state must meet the deletion and parity gates below, or be explicitly scoped as a non-release internal branch.
 
 6. **Preserve real platform behavior, not accidental implementation layers.**
-   - Preserve Hono routing, Durable Objects, migrations, state/session durability, bindings, channels, dispatch, WebSockets, and supported sandbox capabilities.
+   - Preserve Hono routing, Durable Objects, migrations, state/session durability, bindings, dispatch, WebSockets, and supported sandbox capabilities.
    - Remove intermediate bundles, duplicated compilers, ambiguous output redirects, or watcher workarounds when the new platform integration makes them unnecessary.
 
 7. **Prefer refactoring shared infrastructure before copying new target variants.**
@@ -726,7 +726,7 @@ Make `flue build --target node`, `flue dev --target node`, and any Node-backed `
 3. Preserve required Node behavior:
    - Node 22.18+ target/support expectations;
    - Hono default/custom app behavior;
-   - HTTP agent/workflow/channel routes;
+   - HTTP agent/workflow routes and application-owned ingress;
    - Node WebSocket behavior;
    - `flue run` workflow invocation and SSE behavior;
    - source maps and understandable error locations;
@@ -744,7 +744,7 @@ Make `flue build --target node`, `flue dev --target node`, and any Node-backed `
 - Existing Node build-plugin/runtime artifact tests under Vite.
 - Imported `SkillReference` through a built Node artifact.
 - Registered/direct activation where executable fixture support permits.
-- HTTP app routes and mounted channel app routes.
+- HTTP app routes and application-owned ingress routes.
 - WebSocket behavior.
 - `flue run` behavior.
 - Dependency/native-module fixture coverage sufficient for currently supported sandbox/tool paths.
@@ -792,7 +792,7 @@ Make actual Cloudflare CLI commands use the official Cloudflare Vite/workerd int
    - workflow invocation and run/result/stream behavior;
    - generated agent/workflow Durable Object exports;
    - `FlueRegistry` and SQLite-backed state/migration correctness;
-   - channel applications and dispatch where supported;
+   - application-owned ingress and dispatch where supported;
    - WebSocket agent/workflow transport;
    - ordinary user bindings such as Workers AI/R2 fixtures;
    - Worker Loader/sandbox/container support if it is part of current supported product behavior.
@@ -814,7 +814,7 @@ The Cloudflare production switch must have executable integration coverage, not 
 - workerd-backed direct HTTP/workflow behavior;
 - imported skill reference and activated packaged-file behavior;
 - DO state/migration/registry behavior;
-- channel route behavior;
+- application ingress route behavior;
 - WebSocket behavior modeled after `examples/cloudflare-websocket/` and existing tests;
 - binding/config passthrough fixtures;
 - sandbox/container/Worker Loader fixture or an explicit supported-feature decision;
@@ -988,7 +988,7 @@ If a lint command exists or is added in repository guidance/package scripts, run
 - Default/custom Hono app behavior.
 - Direct agent route.
 - Workflow route/run invocation and `flue run` behavior.
-- Mounted channel app route and dispatch behavior where applicable.
+- Application ingress route and dispatch behavior where applicable.
 - Node WebSocket behavior.
 - Static packaged skill reference and activation/file access.
 - Supported native/dynamic dependency/externalization fixture behavior.
@@ -1003,7 +1003,7 @@ Tests must execute against official Cloudflare Vite/workerd integration for beha
 - Agent/workflow Durable Object exports and routing work.
 - `FlueRegistry`, session state, and migration behavior work.
 - Default/custom Hono apps work.
-- Channel route and dispatch behavior work where supported.
+- Application ingress route and dispatch behavior work where supported.
 - WebSocket behavior works.
 - User binding configuration passes through correctly.
 - Imported packaged skills work under workerd.

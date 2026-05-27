@@ -13,7 +13,7 @@ flue connect <agent> <instance-id> [--target node] [--session <name>] [--root <p
 
 `flue connect` builds the selected Node project and opens a local connection to one discovered agent instance. Enter one prompt per line; the connection remains open until end-of-input or interruption so in-memory instance and session state can be reused between prompts.
 
-The local connection uses a private child-process channel. The agent does not need public HTTP or WebSocket exposure, and public application ingress middleware is not executed.
+The local connection uses private child-process communication. The agent does not need public HTTP or WebSocket exposure, and public application ingress middleware is not executed.
 
 ## Options
 

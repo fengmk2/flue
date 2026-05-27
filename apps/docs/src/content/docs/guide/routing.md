@@ -37,4 +37,4 @@ TODO: Introduce client access patterns without duplicating transport API referen
 
 ## Asynchronous inbound delivery
 
-TODO: Point webhook/event readers to Channels and `dispatch()` rather than presenting dispatch as direct routing.
+TODO: Point webhook/event readers to custom application routes and `dispatch()` rather than presenting dispatch as direct routing.

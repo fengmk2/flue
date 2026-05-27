@@ -1,6 +1,6 @@
 ---
 title: Project Layout
-description: Organize agents, workflows, channels, application code, and workspace context in a Flue project.
+description: Organize agents, workflows, application code, and workspace context in a Flue project.
 ---
 
 ## Choose a source layout
@@ -22,10 +22,6 @@ TODO: Cover the location and purpose of addressable, default-exported created ag
 ## Workflows
 
 TODO: Cover the location and purpose of `run()`-exporting orchestration modules.
-
-## Channels
-
-TODO: Cover the location of authored inbound provider adapters.
 
 ## Custom application entrypoint
 

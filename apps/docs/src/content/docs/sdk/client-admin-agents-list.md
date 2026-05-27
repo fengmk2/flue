@@ -1,6 +1,6 @@
 ---
 title: client.admin.agents.list()
-description: List exposed agents and their channel metadata through admin routes.
+description: List exposed agents and their transport metadata through admin routes.
 ---
 
 ## Signature
@@ -9,7 +9,7 @@ TODO: Document the read-only administrative agent listing method.
 
 ## Response
 
-TODO: Reference exposed agent names and channel metadata.
+TODO: Reference exposed agent names and transport metadata.
 
 ## Mounting admin routes
 

@@ -10,7 +10,7 @@
 
 - **Cloudflare Shell sandbox wiring is now project-owned.** Install it with `flue add @cloudflare/shell` and import `getShellSandbox`, `getDefaultWorkspace`, and `hydrateFromBucket` from the generated connector file; `@flue/runtime/cloudflare` no longer bundles the `@cloudflare/shell` implementation.
 
-- **Public HTTP and WebSocket exposure is now declared exclusively through middleware exports.** Agent and workflow modules export `route` to enable HTTP access and `websocket` to enable WebSocket access; the middleware may authorize or transform requests and call `await next()` to enter Flue's built-in handler. The former attached `channels = [http()]` / `channels = [websocket()]` declarations are no longer supported. Authored provider channel applications created with `defineChannel(...)` are unchanged.
+- **Public HTTP and WebSocket exposure is now declared exclusively through middleware exports.** Agent and workflow modules export `route` to enable HTTP access and `websocket` to enable WebSocket access; the middleware may authorize or transform requests and call `await next()` to enter Flue's built-in handler.
 
 ### Fixes & Other Changes
 
@@ -30,13 +30,13 @@
 
 - **Public AI observability events now expose model-turn requests and responses.** The `observe(...)` event stream now assigns a `turnId` to model turns, emits a `turn_request` event at the normalized provider-request boundary with model/provider/API identity and model-visible input, and enriches terminal `turn` events with output and provider identity. Compaction model calls emit the same request/result telemetry with `purpose: 'compaction' | 'compaction_prefix'`, while ordinary agent-loop turns use `purpose: 'agent'`. These content-bearing events are intended for external observability integrations and should be handled as potentially sensitive data. To accommodate full-fidelity model contexts in workflow history, the persisted run-event payload limit is now 1 MB. A new `examples/braintrust/` app demonstrates building Braintrust traces exclusively from this public event surface.
 
-- **Flue now separates workflows that return results from agents that receive messages over time.** Files in `workflows/` are finite request/result jobs: they export `run(...)`, can opt into direct HTTP with `channels = [http()]`, and initialize local created agents with `init(agent)` only when model or sandbox work is needed. Deterministic workflows can omit agents entirely and simply return results from `run(...)`. Files in `agents/` are addressable agent instances: they default-export `createAgent(...)` so the runtime can initialize their stable instance resources, may attach direct `http()` / `websocket()` resources, and may register top-level listeners on authored channel applications that explicitly `dispatch(...)` work. This gives upgrading users a clearer place to put each kind of logic instead of overloading one module shape for both request/result jobs and long-lived message-driven actors.
+- **Flue now separates workflows that return results from agents that receive messages over time.** Files in `workflows/` are finite request/result jobs: they export `run(...)`, can opt into direct HTTP with a `route` middleware export, and initialize local created agents with `init(agent)` only when model or sandbox work is needed. Deterministic workflows can omit agents entirely and simply return results from `run(...)`. Files in `agents/` are addressable agent instances: they default-export `createAgent(...)` so the runtime can initialize their stable instance resources and may export `route` or `websocket` middleware for direct exposure. This gives upgrading users a clearer place to put each kind of logic instead of overloading one module shape for both request/result jobs and long-lived message-driven actors.
 
   ```ts
   // .flue/workflows/translate.ts
-  import { createAgent, http, type FlueContext } from '@flue/runtime';
+  import { createAgent, type FlueContext, type WorkflowRouteHandler } from '@flue/runtime';
 
-  export const channels = [http()];
+  export const route: WorkflowRouteHandler = async (_c, next) => next();
 
   const translator = createAgent(() => ({ model: 'anthropic/claude-sonnet-4-6' }));
 
@@ -53,10 +53,9 @@
 
   ```ts
   // .flue/agents/assistant.ts
-  import { createAgent, defineAgentProfile } from '@flue/runtime';
-  import { http } from '@flue/runtime/channels';
+  import { createAgent, defineAgentProfile, type AgentRouteHandler } from '@flue/runtime';
 
-  export const channels = [http()];
+  export const route: AgentRouteHandler = async (_c, next) => next();
 
   const assistant = defineAgentProfile({
     model: 'anthropic/claude-haiku-4-5',
@@ -69,7 +68,7 @@
   }));
   ```
 
-- **Agents can now receive direct messages and dispatched channel events through the same instance/session model.** Direct HTTP and WebSocket prompts to `/agents/:name/:id` are attached interactions against the selected session. Authored channel applications parse provider events and invoke agent-owned `channel.on(...)` listeners, where user code can filter events and `dispatch(...)` structured inputs into any target agent instance/session. Accepted dispatches are identified by `dispatchId` and persisted into session history with delivery metadata. Neither direct prompts nor dispatched inputs create agent runs or emit workflow `run_start` / `run_end` events.
+- **Agents can now receive direct messages and asynchronously dispatched input through the same instance/session model.** Direct HTTP and WebSocket prompts to `/agents/:name/:id` are attached interactions against the selected session. Application routes and integrations can `dispatch(...)` structured inputs into any target agent instance/session. Accepted dispatches are identified by `dispatchId` and persisted into session history with delivery metadata. Neither direct prompts nor dispatched inputs create agent runs or emit workflow `run_start` / `run_end` events.
 
   ```bash
   curl http://localhost:3583/agents/assistant/account-123 \
@@ -78,14 +77,16 @@
   ```
 
   ```ts
+  import { Hono } from 'hono';
   import { createAgent, dispatch } from '@flue/runtime';
-  import discord from '../channels/discord.ts';
 
   const moderator = createAgent(() => ({ model: 'anthropic/claude-haiku-4-5' }));
+  const app = new Hono();
 
-  discord.on('message.created', async ({ event }) => {
-    if (!event.flagged) return;
-    await dispatch(moderator, {
+  app.post('/events/discord', async (c) => {
+    const event = await c.req.json();
+    if (!event.flagged) return c.json({ accepted: false }, 202);
+    const receipt = await dispatch(moderator, {
       id: `guild:${event.guildId}`,
       session: `case:${event.caseId}`,
       input: {
@@ -94,51 +95,8 @@
         message: event.message,
       },
     });
+    return c.json(receipt, 202);
   });
-  ```
-
-- **Inbound provider channels are authored applications with agent-owned listeners.** Modules in `.flue/channels/` or `channels/` default-export `defineChannel({ app })`; their Hono applications are discovered and mounted below `/channels/:name/*`, own provider authentication and parsing, and emit typed events. Agent modules import those singleton channels, register top-level `channel.on(...)` listeners, and explicitly `dispatch(...)` accepted work. The legacy provider marker and `receive(...)` fan-out API are removed.
-
-  ```ts
-  // .flue/channels/github.ts
-  import { defineChannel } from '@flue/runtime';
-  import { Hono } from 'hono';
-
-  const app = new Hono();
-  const github = defineChannel<{ issues: { deliveryId: string; payload: any } }, { deliveryId: string }>({ app });
-
-  app.post('/events', async (c) => {
-    const event = await verifyAndParseGitHubWebhook(c.req.raw);
-    const result = await github.emit('issues', { event, thread: { deliveryId: event.deliveryId } });
-    return c.json({ accepted: true, ...result }, 202);
-  });
-
-  export default github;
-  ```
-
-  ```ts
-  // .flue/agents/github-triage.ts
-  import { createAgent, defineAgentProfile, dispatch } from '@flue/runtime';
-  import github from '../channels/github.ts';
-
-  const triage = defineAgentProfile({
-    model: 'anthropic/claude-haiku-4-5',
-    instructions: 'Triage inbound GitHub issue events for this repository.',
-  });
-  const agent = createAgent(() => ({ profile: triage }));
-
-  github.on('issues', async ({ event }) => {
-    const repo = event.payload.repository?.full_name;
-    const issue = event.payload.issue?.number;
-    if (typeof repo !== 'string' || typeof issue !== 'number') return;
-    await dispatch(agent, {
-      id: `repo:${repo}`,
-      session: `issue:${issue}`,
-      input: { type: 'github.issue', deliveryId: event.deliveryId },
-    });
-  });
-
-  export default agent;
   ```
 
 - **Reusable agent profiles, runtime-created agents, named subagents, and reusable tool values replace the old role-centered delegation model.** `defineAgentProfile(...)` describes reusable behavior, including instructions, tools, skills, model defaults, subagents, thinking level, and compaction settings. `createAgent(...)` attaches that behavior to runtime initialization such as sandbox, cwd, and persistence; synchronous initializers use `createAgent(() => ({ ... }))`, while asynchronous initializers remain available when provisioning must await external work. Pass named profiles through the parent profile and delegate with `task({ agent })`, so delegation is explicit and type-shaped like the rest of the runtime. `defineTool()` and the `ToolDefinition` type make custom tools reusable module-scope values instead of ad hoc objects assembled at each call site.
@@ -224,15 +182,15 @@
 
 - **Each workflow now gets its own Durable Object class and binding on the Cloudflare target.** Workflow runs were previously multiplexed through a single shared `WorkflowRunOwner` class behind the `FLUE_WORKFLOW_RUNS` binding; the build now generates one DO class per workflow definition (`draft` → `DraftWorkflow`) bound under a namespaced binding name (`FLUE_WORKFLOW_DRAFT`). Each workflow run is still its own DO instance, but the instance is keyed by an `instanceId` that equals the `runId`, mirroring how agents are keyed by `:id`. The internal `RunOwner` workflow variant changed from `{ kind: 'workflow', workflowName, runId }` to `{ kind: 'workflow', workflowName, instanceId }`, and `run_start` events for workflows now include `instanceId` and `workflowName` alongside `runId`. The cross-deployment FlueRegistry pointer index migrates forward (the legacy `owner_run_id` column is backfilled into `instance_id`), so `/runs/:runId` lookups for historical workflow runs still resolve. The per-run event/result data stored inside the old `WorkflowRunOwner` DO instances is not migrated — once the shared class is removed from your `wrangler.jsonc`, those events are no longer reachable. Remove the `FLUE_WORKFLOW_RUNS` binding and `WorkflowRunOwner` class from your `wrangler.jsonc` after deploying.
 
-- **One-shot agents should move to workflows, and long-lived agent modules now default-export `createAgent(...)`.** Existing request/result files that were previously placed under `agents/` should move to `workflows/` and export `run(...)`. Long-lived agents stay under `agents/`, where direct HTTP/WebSocket exposure is declared with `channels`, instance construction is declared with a default `createAgent(...)` export, and authored channel applications route accepted events through top-level `channel.on(...)` listeners and `dispatch(...)`. Workflows remain in control of lifecycle and call `init(agent)` only when they need a harness.
+- **One-shot agents should move to workflows, and long-lived agent modules now default-export `createAgent(...)`.** Existing request/result files that were previously placed under `agents/` should move to `workflows/` and export `run(...)`. Long-lived agents stay under `agents/`, where direct HTTP/WebSocket exposure is declared with `route` or `websocket` middleware exports and instance construction is declared with a default `createAgent(...)` export. Workflows remain in control of lifecycle and call `init(agent)` only when they need a harness.
 
   ```diff
   - // .flue/agents/hello.ts
   - export const triggers = { webhook: true };
   - export default async function handler({ init, payload }) {
   + // .flue/workflows/hello.ts
-  + import { createAgent, http } from '@flue/runtime';
-  + export const channels = [http()];
+  + import { createAgent, type WorkflowRouteHandler } from '@flue/runtime';
+  + export const route: WorkflowRouteHandler = async (_c, next) => next();
   + const agent = createAgent(() => ({ model: 'anthropic/claude-sonnet-4-6' }));
   + export async function run({ init, payload }) {
       const harness = await init(agent);
@@ -241,7 +199,7 @@
     }
   ```
 
-- **Workflow and agent modules now reserve only Flue-owned exports.** Workflow modules export a callable `run` value and may export direct attached `channels`; they can initialize locally declared `createAgent(...)` values when needed but do not default-export a primary agent. Agent modules must default-export `createAgent(...)` and may export direct attached `channels`, `route`, or `websocket` middleware. Provider event listeners belong in authored channel imports via top-level `channel.on(...)` registration. Other local exports are allowed for schemas, helper functions, and TypeScript-only payload/result types. Flue validates evaluated module values when the built application starts rather than requiring a specific export declaration syntax.
+- **Workflow and agent modules now reserve only Flue-owned exports.** Workflow modules export a callable `run` value and may export `route` or `websocket` middleware; they can initialize locally declared `createAgent(...)` values when needed but do not default-export a primary agent. Agent modules must default-export `createAgent(...)` and may export `route` or `websocket` middleware. Other local exports are allowed for schemas, helper functions, and TypeScript-only payload/result types. Flue validates evaluated module values when the built application starts rather than requiring a specific export declaration syntax.
 
 - **Workflow harness creation now accepts created agents instead of inline initialization options.** Replace `await init({ model, sandbox, tools, subagents, cwd, persist })` with a local `const agent = createAgent(() => ({ model, sandbox, tools, subagents, cwd, persist }))` followed by `await init(agent)`. A workflow can retain authorization and branching control by calling `init(agent)` only after request validation, and can initialize multiple harness namespaces with `init(agent, { name })`.
 
@@ -265,8 +223,6 @@
 
 - **`ToolDef` was renamed to `ToolDefinition`.** Update type imports from `ToolDef` to `ToolDefinition`; no compatibility alias is provided.
 
-- **Legacy provider-marker subscriptions and `receive(...)` fan-out are removed.** Replace `defineChannel('github')`, `ReceiveContext`, `Delivery`, and agent `receive(...)` exports with a discovered channel module that default-exports `defineChannel({ app })` and agent-owned `channel.on(...)` listeners. Authored channel apps are mounted automatically below `/channels/:name/*` through `flue()`.
-
 - **Legacy roles are removed in favor of named subagents.** Role markdown files and role options on sessions or calls are no longer part of the runtime model. Use `defineAgentProfile(...)` for reusable delegate profiles and select them with `task({ agent })`; task lifecycle events now report the selected `agent` instead of a `role`.
 
   ```diff
@@ -284,11 +240,9 @@
 
 - **Workflow runs and agent interactions now have separate lifecycle models.** Workflows retain persisted runs, `runId`, `/runs` inspection, and `run_start` / `run_end`. Direct agent HTTP calls still support regular JSON responses and `Accept: text/event-stream`, but direct and dispatched agent inputs execute inside persistent sessions and emit agent lifecycle events instead of workflow run boundaries. Dispatched delivery is correlated by `dispatchId`. Workflow HTTP calls default to fire-and-forget admission with `202 { status: "accepted", runId }`; use `?wait=result` for a synchronous JSON result envelope or `Accept: text/event-stream` to stream workflow run events. `flue run` and `flue logs` remain workflow-run tooling.
 
-- **Authored channel listener delivery is failure-isolated.** `channel.emit(...)` invokes registered `channel.on(...)` listeners independently and returns `{ invoked, errors }`; each listener may dispatch zero, one, or many JSON-like inputs while global dispatch snapshots its accepted input at admission time.
-
 - **Workers AI streaming uses less CPU while parsing SSE responses.** The Cloudflare Workers AI provider now avoids unnecessary parsing overhead in streamed responses, which matters most for long outputs and high-concurrency Worker deployments.
 
-- **Examples and docs were migrated to the new model.** One-shot examples now live under `workflows/`, message-driven examples demonstrate direct agent delivery and authored-channel dispatch, `examples/github-webhook` owns GitHub parsing and signature verification in a discovered channel application, and `examples/cross-channel-routing` shows how multiple authored channel listeners route work into shared agent sessions.
+- **Examples and docs were migrated to the new model.** One-shot examples now live under `workflows/`, message-driven examples demonstrate direct agent delivery and application-owned dispatch, and `examples/chat-sdk` shows provider ingress and outbound actions composed through a custom application boundary.
 
 ## 0.6.2 - 2026-05-14
 

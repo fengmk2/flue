@@ -76,7 +76,7 @@ Reusing the ID keeps Flue's session scope stable. On Node.js, that session state
 
 Render closes idle HTTP connections after about 100 seconds. Most prompt-and-response agents finish well inside that window, but if you build agents that run long tool chains or large multi-step prompts, plan for either streamed responses or a scheduled / background runner (see [Going further](#going-further)) instead of a single blocking request.
 
-If you only need direct attached agent prompts or authored webhook channels that dispatch inputs into in-memory sessions, you can stop here.
+If you only need direct attached agent prompts or application webhook routes that dispatch inputs into in-memory sessions, you can stop here.
 
 ## 3. Review the web service config
 

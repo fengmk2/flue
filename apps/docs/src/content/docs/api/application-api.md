@@ -9,7 +9,7 @@ TODO: Document the application composition entry point for authored `app.ts` mod
 
 ## `flue()`
 
-TODO: Reference the public application routes for agents, workflows, runs, channels, and OpenAPI output.
+TODO: Reference the public application routes for agents, workflows, runs, and OpenAPI output.
 
 ## `admin()`
 

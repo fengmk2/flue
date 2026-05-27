@@ -63,7 +63,7 @@ npx flue run hello --target node \
   --payload '{"name": "World"}'
 ```
 
-`flue run` builds the project, invokes the workflow through a private local child-process channel, streams progress to stderr, and prints the final result as JSON to stdout. The workflow does not need public transport exposure for this local command.
+`flue run` builds the project, invokes the workflow through a private local child-process communication, streams progress to stderr, and prints the final result as JSON to stdout. The workflow does not need public transport exposure for this local command.
 
 ### 4. Wire it into GitLab CI/CD
 
@@ -335,4 +335,4 @@ npx flue run triage --target node \
   --payload '{"issueIid": 42}' | jq '.severity'
 ```
 
-The CLI builds your project root, invokes the workflow through a private local child-process channel, streams progress to stderr, and prints the final result to stdout.
+The CLI builds your project root, invokes the workflow through a private local child-process communication, streams progress to stderr, and prints the final result to stdout.

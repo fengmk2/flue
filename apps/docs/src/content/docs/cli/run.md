@@ -11,7 +11,7 @@ flue run <workflow> [--target node] [--payload <json>] [--root <path>] [--output
 
 ## Description
 
-`flue run` builds the selected Node project and executes one discovered workflow locally. It uses a private child-process channel, so the workflow does not need a public HTTP or WebSocket exposure declaration and application ingress middleware is not executed.
+`flue run` builds the selected Node project and executes one discovered workflow locally. It uses private child-process communication, so the workflow does not need public HTTP or WebSocket exposure and application ingress middleware is not executed.
 
 A workflow invocation is a finite run with a run ID. Use it for local scripts and CI tasks, not interactive agent sessions.
 

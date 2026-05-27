@@ -5,7 +5,7 @@ description: Combine Chat SDK platform adapters with Flue agents for two-way con
 
 Chat platforms are more than webhook sources: a useful assistant may need to recognize mentions, continue a thread, post formatted replies, react to messages, or use provider-specific interactions. [Chat SDK](https://chat-sdk.dev/docs) provides these chat-facing capabilities across supported platforms, while Flue provides addressable agents, continuing sessions, tools, and asynchronous execution.
 
-For most two-way chat integrations, Chat SDK is a natural companion to Flue. It is not required: an [authored channel](/guide/channels/) or a custom application route can be a better fit for provider events that do not need conversational semantics or for integrations requiring complete control of the provider API surface.
+For most two-way chat integrations, Chat SDK is a natural companion to Flue. It is not required: a custom application route can be a better fit for provider events that do not need conversational semantics or for integrations requiring complete control of the provider API surface.
 
 ## Architecture
 
@@ -96,7 +96,7 @@ Import `dispatch` from `@flue/runtime` and prefer `dispatch(agent, ...)` when th
 
 ## Mount provider ingress in the application
 
-A custom `app.ts` composes Chat SDK webhook routes with the Flue application. The bot remains ordinary application-owned integration code; it does not need to be modeled as an authored channel:
+A custom `app.ts` composes Chat SDK webhook routes with the Flue application. The bot remains ordinary application-owned integration code:
 
 ```ts title=".flue/app.ts"
 import { flue } from '@flue/runtime/app';
@@ -202,7 +202,7 @@ Chat SDK offers adapters for platforms with different interaction and transport 
 
 Use `dispatchId`, agent instance identity, session identity, and operation events to observe chat-triggered agent processing. Work dispatched from Chat SDK handlers does not create workflow `runId` values; use Flue observation integrations rather than workflow-run tooling for this traffic.
 
-## Chat SDK, authored channels, or direct routes?
+## Chat SDK or custom routes?
 
 These integration surfaces are complementary:
 
@@ -210,10 +210,10 @@ These integration surfaces are complementary:
 | --- | --- |
 | Two-way conversational assistant across supported chat platforms | Chat SDK with Flue agents |
 | Provider thread assistant that posts replies or actions, such as GitHub issue discussions | Chat SDK with Flue agents |
-| Typed inbound provider events without conversational output | Authored Flue channel |
+| Typed inbound provider events without conversational output | Custom application route with `dispatch(...)` |
 | Bespoke webhook handling or provider behavior not represented by a shared abstraction | Custom route with the provider SDK |
 | Finite, result-oriented automation initiated by application logic | Flue workflow |
 
-Chat SDK is a strong default when the core user experience is a conversation. Authored channels and direct routes remain appropriate when an integration is primarily event-driven, provider-specific, or deliberately does not expose conversational actions to an agent.
+Chat SDK is a strong default when the core user experience is a conversation. Custom routes remain appropriate when an integration is primarily event-driven, provider-specific, or deliberately does not expose conversational actions to an agent.
 
 See `examples/chat-sdk/` for the runnable GitHub integration pattern and the Chat SDK documentation for current platform capabilities and state adapter options.

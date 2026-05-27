@@ -70,7 +70,6 @@ export const docsSections: DocsSection[] = [
 					{ title: 'Agent API', slug: 'api/agent-api' },
 					{ title: 'Workflows API', slug: 'api/workflows-api' },
 					{ title: 'Harness API', slug: 'api/harness-api' },
-					{ title: 'Channels API', slug: 'api/channels-api' },
 					{ title: 'Sandbox API', slug: 'api/sandbox-api' },
 					{ title: 'Data Persistence API', slug: 'api/data-persistence-api' },
 					{ title: 'Events Reference', slug: 'api/events-reference' },

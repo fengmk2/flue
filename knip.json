@@ -6,16 +6,16 @@
 	},
 	"workspaces": {
 		".": {
-			"entry": [".flue/{app,agents/*,workflows/*,channels/*}.{ts,mts,js,mjs}"],
+			"entry": [".flue/{app,agents/*,workflows/*}.{ts,mts,js,mjs}"],
 			"project": [".flue/**/*.{ts,mts,js,mjs}"],
 			"ignoreDependencies": ["bgproc", "just-bash"]
 		},
 		"examples/*": {
-			"entry": [".flue/{app,agents/*,workflows/*,channels/*}.{ts,mts,js,mjs}"],
+			"entry": [".flue/{app,agents/*,workflows/*}.{ts,mts,js,mjs}"],
 			"project": [".flue/**/*.{ts,mts,js,mjs}"]
 		},
 		"examples/node-websocket": {
-			"entry": [".flue/{app,agents/*,workflows/*,channels/*}.{ts,mts,js,mjs}", "flue.config.ts"],
+			"entry": [".flue/{app,agents/*,workflows/*}.{ts,mts,js,mjs}", "flue.config.ts"],
 			"project": [".flue/**/*.{ts,mts,js,mjs}"],
 			"ignoreDependencies": ["@flue/sdk"]
 		}
