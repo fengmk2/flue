@@ -2,21 +2,30 @@
 
 ## Unreleased
 
+## 0.8.0 - 2026-05-27
+
+This is a large pre-1.0 release that establishes Flue's model for building persistent agents and finite workflows. Rather than cataloging every intermediate beta change, this entry highlights the final APIs and the most important upgrade work. For guides and API reference, see the [documentation sources](https://github.com/withastro/flue/tree/main/apps/docs/src/content/docs) while the documentation site is being finalized.
+
 ### New Features
 
-- **Created agents can now declare runtime capabilities directly from their initializer.** Agent initialization supports reusable tools and other operation capabilities on the created agent configuration, making stable instance-scoped behavior available without requiring a separate profile definition.
+- **Distinct agents and workflows.** Files in `agents/` now define persistent, addressable agent instances with `createAgent(...)`; files in `workflows/` define finite executions with `run(...)`. Agents maintain sessions across direct interactions and dispatched inputs, while workflows own persisted runs and results.
+- **Message-driven and live application surfaces.** Agents support direct HTTP prompts, asynchronous `dispatch(...)`, and WebSocket conversations. Workflows support HTTP and WebSocket invocation, and `@flue/sdk` now includes typed clients for connecting to deployed Flue applications.
+- **Composable agent capabilities.** `createAgent(...)`, `defineAgentProfile(...)`, `defineTool(...)`, and named subagents provide explicit reusable building blocks for model configuration, runtime resources, tools, skills, and delegation.
+- **Packaged Agent Skills and Markdown imports.** Applications can import `SKILL.md` dependencies as validated `SkillReference` values, bundle their supporting files for Node or Cloudflare, and import attributed Markdown through the shared Vite build pipeline.
+- **Observability and integrations.** Public model-turn telemetry enables tracing integrations such as the new Braintrust example. This release also adds a documentation app and examples for Chat SDK, Node WebSockets, Cloudflare WebSockets, and imported skills.
 
 ### Breaking Changes
 
-- **Cloudflare Shell sandbox wiring is now project-owned.** Install it with `flue add @cloudflare/shell` and import `getShellSandbox`, `getDefaultWorkspace`, and `hydrateFromBucket` from the generated connector file; `@flue/runtime/cloudflare` no longer bundles the `@cloudflare/shell` implementation.
-
-- **Public HTTP and WebSocket exposure is now declared exclusively through middleware exports.** Agent and workflow modules export `route` to enable HTTP access and `websocket` to enable WebSocket access; the middleware may authorize or transform requests and call `await next()` to enter Flue's built-in handler.
+- **Applications must adopt the agent/workflow split.** Move one-shot request/result modules from `agents/` to `workflows/`; long-lived agent modules now default-export `createAgent(...)`. Workflows create harnesses with `init(agent)` rather than inline `init({ ... })` configuration.
+- **Routing and run semantics changed.** Public HTTP and WebSocket exposure is declared through `route` and `websocket` middleware exports. Runs, `/runs`, and `flue logs` now describe workflows only; direct or dispatched agent interactions correlate by instance, session, operation, and `dispatchId` instead of `runId`.
+- **Roles and older agent definitions were replaced.** Migrate roles and `task({ role })` to named `defineAgentProfile(...)` subagents and `task({ agent })`; migrate reusable agent definitions to profiles and `ToolDef` imports to `ToolDefinition`.
+- **Build and Cloudflare configuration changed.** Node and Cloudflare builds now use a shared Vite graph; Cloudflare development follows `.dev.vars` / `.env` and `CLOUDFLARE_ENV` conventions. Cloudflare workflows now receive per-workflow Durable Object bindings, so review generated Wrangler configuration when upgrading.
+- **Cloudflare Shell is connector-owned.** Install it with `flue add @cloudflare/shell` and import its workspace sandbox helpers from the generated connector rather than `@flue/runtime/cloudflare`.
 
 ### Fixes & Other Changes
 
-- **Cloudflare Vite builds preserve authored environment configuration.** Generated Wrangler configuration now merges environment-specific user settings correctly instead of losing them while injecting Flue bindings and runtime configuration.
-
-- **Model-invoked subagent tasks now execute correctly.** Sessions can dispatch a `task` tool call requested by the model, restoring delegated operation execution through configured subagents.
+- Improved durability and retry handling for Cloudflare workflow admission and interrupted direct agent prompts, preserved authored Cloudflare environment configuration during Vite builds, and reduced Workers AI streaming parse overhead.
+- Fixed model-invoked subagent task execution and expanded migrated examples and documentation for the new application model.
 
 ## 0.7.1 - 2026-05-25
 
@@ -28,221 +37,11 @@
 
 ### New Features
 
-- **Public AI observability events now expose model-turn requests and responses.** The `observe(...)` event stream now assigns a `turnId` to model turns, emits a `turn_request` event at the normalized provider-request boundary with model/provider/API identity and model-visible input, and enriches terminal `turn` events with output and provider identity. Compaction model calls emit the same request/result telemetry with `purpose: 'compaction' | 'compaction_prefix'`, while ordinary agent-loop turns use `purpose: 'agent'`. These content-bearing events are intended for external observability integrations and should be handled as potentially sensitive data. To accommodate full-fidelity model contexts in workflow history, the persisted run-event payload limit is now 1 MB. A new `examples/braintrust/` app demonstrates building Braintrust traces exclusively from this public event surface.
-
-- **Flue now separates workflows that return results from agents that receive messages over time.** Files in `workflows/` are finite request/result jobs: they export `run(...)`, can opt into direct HTTP with a `route` middleware export, and initialize local created agents with `init(agent)` only when model or sandbox work is needed. Deterministic workflows can omit agents entirely and simply return results from `run(...)`. Files in `agents/` are addressable agent instances: they default-export `createAgent(...)` so the runtime can initialize their stable instance resources and may export `route` or `websocket` middleware for direct exposure. This gives upgrading users a clearer place to put each kind of logic instead of overloading one module shape for both request/result jobs and long-lived message-driven actors.
-
-  ```ts
-  // .flue/workflows/translate.ts
-  import { createAgent, type FlueContext, type WorkflowRouteHandler } from '@flue/runtime';
-
-  export const route: WorkflowRouteHandler = async (_c, next) => next();
-
-  const translator = createAgent(() => ({ model: 'anthropic/claude-sonnet-4-6' }));
-
-  export async function run({ init, payload }: FlueContext) {
-    const harness = await init(translator);
-    const session = await harness.session();
-    const { data } = await session.prompt(
-      `Translate this to ${payload.language}: ${payload.text}`,
-    );
-
-    return data;
-  }
-  ```
-
-  ```ts
-  // .flue/agents/assistant.ts
-  import { createAgent, defineAgentProfile, type AgentRouteHandler } from '@flue/runtime';
-
-  export const route: AgentRouteHandler = async (_c, next) => next();
-
-  const assistant = defineAgentProfile({
-    model: 'anthropic/claude-haiku-4-5',
-    instructions: 'You are a helpful assistant for this account.',
-  });
-
-  export default createAgent(({ id }) => ({
-    profile: assistant,
-    cwd: `/accounts/${id}`,
-  }));
-  ```
-
-- **Agents can now receive direct messages and asynchronously dispatched input through the same instance/session model.** Direct HTTP and WebSocket prompts to `/agents/:name/:id` are attached interactions against the selected session. Application routes and integrations can `dispatch(...)` structured inputs into any target agent instance/session. Accepted dispatches are identified by `dispatchId` and persisted into session history with delivery metadata. Neither direct prompts nor dispatched inputs create agent runs or emit workflow `run_start` / `run_end` events.
-
-  ```bash
-  curl http://localhost:3583/agents/assistant/account-123 \
-    -H "Content-Type: application/json" \
-    -d '{"session":"thread:general","message":"Summarize today."}'
-  ```
-
-  ```ts
-  import { Hono } from 'hono';
-  import { createAgent, dispatch } from '@flue/runtime';
-
-  const moderator = createAgent(() => ({ model: 'anthropic/claude-haiku-4-5' }));
-  const app = new Hono();
-
-  app.post('/events/discord', async (c) => {
-    const event = await c.req.json();
-    if (!event.flagged) return c.json({ accepted: false }, 202);
-    const receipt = await dispatch(moderator, {
-      id: `guild:${event.guildId}`,
-      session: `case:${event.caseId}`,
-      input: {
-        type: 'discord.message.flagged',
-        deliveryId: event.deliveryId,
-        message: event.message,
-      },
-    });
-    return c.json(receipt, 202);
-  });
-  ```
-
-- **Reusable agent profiles, runtime-created agents, named subagents, and reusable tool values replace the old role-centered delegation model.** `defineAgentProfile(...)` describes reusable behavior, including instructions, tools, skills, model defaults, subagents, thinking level, and compaction settings. `createAgent(...)` attaches that behavior to runtime initialization such as sandbox, cwd, and persistence; synchronous initializers use `createAgent(() => ({ ... }))`, while asynchronous initializers remain available when provisioning must await external work. Pass named profiles through the parent profile and delegate with `task({ agent })`, so delegation is explicit and type-shaped like the rest of the runtime. `defineTool()` and the `ToolDefinition` type make custom tools reusable module-scope values instead of ad hoc objects assembled at each call site.
-
-  ```ts
-  import { createAgent, defineAgentProfile, defineTool, Type } from '@flue/runtime';
-
-  const lookupIssue = defineTool({
-    name: 'lookupIssue',
-    description: 'Load issue metadata from the tracker.',
-    parameters: Type.Object({ id: Type.String() }),
-    async execute({ id }) {
-      return { id, priority: 'high' };
-    },
-  });
-
-  const auditor = defineAgentProfile({
-    name: 'auditor',
-    instructions: 'Review decisions for risk and missing evidence.',
-  });
-
-  const triage = defineAgentProfile({
-    model: 'anthropic/claude-haiku-4-5',
-    instructions: 'Triage incoming support work.',
-    tools: [lookupIssue],
-    subagents: [auditor],
-  });
-
-  export default createAgent(() => ({ profile: triage }));
-  ```
-
-- **Agent Skills can be imported, validated, packaged, and called as first-class `SkillReference` values.** Agent code can import spec-compliant `SKILL.md` directories with `with { type: 'skill' }`; the shared Vite build validates frontmatter and packages the complete permitted skill directory for both Node and Cloudflare output, including supporting files outside `scripts/`, `references/`, and `assets/`. `session.skill(skillValue)` activates an imported reference directly; registering it in `skills: [skillValue]` also supports `session.skill('name')` and permits its lazy supporting-file reads during agent operations. Importing an unregistered reference alone does not expose its files to ordinary prompts. Builds now reject likely credential/private-key content within imported skill directories, and binary supporting files retain base64 read semantics regardless of directory location.
-
-  ```ts
-  import codeReview from '../skills/code-review/SKILL.md' with { type: 'skill' };
-  import { createAgent, type FlueContext } from '@flue/runtime';
-  import * as v from 'valibot';
-
-  const ReviewResult = v.object({ summary: v.string() });
-  const reviewer = createAgent(() => ({ model: 'anthropic/claude-sonnet-4-6' }));
-
-  export async function run({ init, payload }: FlueContext) {
-    const harness = await init(reviewer);
-    const session = await harness.session();
-
-    const { data } = await session.skill(codeReview, {
-      result: ReviewResult,
-      args: { diff: payload.diff },
-    });
-
-    return data;
-  }
-  ```
-
-- **Cloudflare shell workspaces are now the supported bucket-backed sandbox story.** `getShellSandbox({ workspace, loader })`, `getDefaultWorkspace()`, and `hydrateFromBucket()` from `@flue/runtime/cloudflare` wire `@cloudflare/shell` Workspaces into Flue through a codemode `code` tool backed by a Worker Loader binding. This replaces the older mental model that R2 was mounted directly as the agent filesystem; Workspaces are SQLite-indexed filesystems with optional R2 blob spillover, so bucket hydration is now explicit before `init(...)`.
-
-  ```ts
-  import { createAgent, type FlueContext } from '@flue/runtime';
-  import {
-    getDefaultWorkspace,
-    getShellSandbox,
-    hydrateFromBucket,
-  } from '@flue/runtime/cloudflare';
-
-  export async function run({ init, env }: FlueContext) {
-    const workspace = getDefaultWorkspace();
-    await hydrateFromBucket(workspace, env.BUCKET);
-
-    const agent = createAgent(() => ({
-      model: 'cloudflare/@cf/moonshotai/kimi-k2.6',
-      sandbox: getShellSandbox({ workspace, loader: env.LOADER }),
-    }));
-    const harness = await init(agent);
-
-    const session = await harness.session();
-    return session.prompt('Inspect the hydrated workspace.');
-  }
-  ```
+- **Cloudflare shell sandbox.** Added `getShellSandbox({ workspace, loader })`, `getDefaultWorkspace()`, and `hydrateFromBucket()` from `@flue/runtime/cloudflare`. The new sandbox wires `@cloudflare/shell` Workspaces into Flue through a codemode `code` tool backed by a Worker Loader binding. Agents use `state.*` inside the `code` tool instead of bash/read/write/grep/glob. Use `@cloudflare/shell` directly for primitives like `Workspace`, `WorkspaceFileSystem`, and `createGit`.
 
 ### Breaking Changes
 
-- **Builds for Node and Cloudflare now use the shared Vite graph, and imported-skill APIs are reference-only.** Legacy eager skill definitions, path-string skill activation, and imported-skill compilation artifacts have been removed. Workspace `.agents/skills/` remain runtime-discovered and activated by name; packaged skill dependencies must be imported as `SkillReference` values. Cloudflare development and builds use the official Cloudflare Vite/workerd integration: use `.dev.vars` / `.env` with `CLOUDFLARE_ENV` for local Cloudflare values rather than `flue dev --target cloudflare --env <path>`. Flue-provided default virtual sandboxes resolve `just-bash` through `@flue/runtime`; only applications that directly import `Bash` or `InMemoryFs` need to declare `just-bash`.
-
-- **Each workflow now gets its own Durable Object class and binding on the Cloudflare target.** Workflow runs were previously multiplexed through a single shared `WorkflowRunOwner` class behind the `FLUE_WORKFLOW_RUNS` binding; the build now generates one DO class per workflow definition (`draft` → `DraftWorkflow`) bound under a namespaced binding name (`FLUE_WORKFLOW_DRAFT`). Each workflow run is still its own DO instance, but the instance is keyed by an `instanceId` that equals the `runId`, mirroring how agents are keyed by `:id`. The internal `RunOwner` workflow variant changed from `{ kind: 'workflow', workflowName, runId }` to `{ kind: 'workflow', workflowName, instanceId }`, and `run_start` events for workflows now include `instanceId` and `workflowName` alongside `runId`. The cross-deployment FlueRegistry pointer index migrates forward (the legacy `owner_run_id` column is backfilled into `instance_id`), so `/runs/:runId` lookups for historical workflow runs still resolve. The per-run event/result data stored inside the old `WorkflowRunOwner` DO instances is not migrated — once the shared class is removed from your `wrangler.jsonc`, those events are no longer reachable. Remove the `FLUE_WORKFLOW_RUNS` binding and `WorkflowRunOwner` class from your `wrangler.jsonc` after deploying.
-
-- **One-shot agents should move to workflows, and long-lived agent modules now default-export `createAgent(...)`.** Existing request/result files that were previously placed under `agents/` should move to `workflows/` and export `run(...)`. Long-lived agents stay under `agents/`, where direct HTTP/WebSocket exposure is declared with `route` or `websocket` middleware exports and instance construction is declared with a default `createAgent(...)` export. Workflows remain in control of lifecycle and call `init(agent)` only when they need a harness.
-
-  ```diff
-  - // .flue/agents/hello.ts
-  - export const triggers = { webhook: true };
-  - export default async function handler({ init, payload }) {
-  + // .flue/workflows/hello.ts
-  + import { createAgent, type WorkflowRouteHandler } from '@flue/runtime';
-  + export const route: WorkflowRouteHandler = async (_c, next) => next();
-  + const agent = createAgent(() => ({ model: 'anthropic/claude-sonnet-4-6' }));
-  + export async function run({ init, payload }) {
-      const harness = await init(agent);
-      const session = await harness.session();
-      return session.prompt(payload.message);
-    }
-  ```
-
-- **Workflow and agent modules now reserve only Flue-owned exports.** Workflow modules export a callable `run` value and may export `route` or `websocket` middleware; they can initialize locally declared `createAgent(...)` values when needed but do not default-export a primary agent. Agent modules must default-export `createAgent(...)` and may export `route` or `websocket` middleware. Other local exports are allowed for schemas, helper functions, and TypeScript-only payload/result types. Flue validates evaluated module values when the built application starts rather than requiring a specific export declaration syntax.
-
-- **Workflow harness creation now accepts created agents instead of inline initialization options.** Replace `await init({ model, sandbox, tools, subagents, cwd, persist })` with a local `const agent = createAgent(() => ({ model, sandbox, tools, subagents, cwd, persist }))` followed by `await init(agent)`. A workflow can retain authorization and branching control by calling `init(agent)` only after request validation, and can initialize multiple harness namespaces with `init(agent, { name })`.
-
-- **Reusable agent definitions were renamed to profiles.** Replace `defineAgent(...)` and `AgentDefinition` with `defineAgentProfile(...)` and `AgentProfile`. Created-agent initializers return `AgentRuntimeConfig`, where a single `profile` provides defaults and inline fields replace profile fields; array fields such as `tools`, `skills`, and `subagents` replace rather than append unless explicitly composed.
-
-- **Public handler context now uses `id` as the workflow identity.** `ctx.runId` is no longer exposed to user workflow code; for workflow invocations, `ctx.id` is the generated workflow instance identifier and is the same value accepted by the workflow-only `/runs/:id` inspection routes. Internal run persistence and event fields remain in place during this transition.
-
-- **Agent-run APIs are removed in favor of persistent-session interaction semantics.** Run-oriented agent APIs described in earlier release notes are superseded by the workflow-only run model introduced in this release.
-
-  | Previous agent behavior | New behavior |
-  | --- | --- |
-  | Direct agent result included `_meta.runId` | Direct agent result returns its result without a run identifier |
-  | Direct agent HTTP accepted background/webhook prompt delivery | Use `dispatch(...)` for asynchronous delivery |
-  | Agent SSE/WebSocket events carried `runId` | Agent events correlate by instance/session/request or `dispatchId` |
-  | Agent prompts emitted `run_start` / `run_end` | Agent prompts emit `agent_start` / `agent_end` and nested lifecycle events |
-  | `/runs/:runId` inspected agent prompts | `/runs/:runId` inspects workflow runs only |
-  | Admin listed runs for an agent instance | Agent-instance run listing is removed |
-  | `flue logs` used generic run terminology | `flue logs` accepts workflow run IDs only |
-
-- **The admin agent manifest now reports created-agent capability as `created`.** Consumers of admin manifest data or `@flue/sdk` should replace the former `init` boolean with `created`, matching agent modules that now default-export `createAgent(...)`.
-
-- **`ToolDef` was renamed to `ToolDefinition`.** Update type imports from `ToolDef` to `ToolDefinition`; no compatibility alias is provided.
-
-- **Legacy roles are removed in favor of named subagents.** Role markdown files and role options on sessions or calls are no longer part of the runtime model. Use `defineAgentProfile(...)` for reusable delegate profiles and select them with `task({ agent })`; task lifecycle events now report the selected `agent` instead of a `role`.
-
-  ```diff
-  - await session.task('Audit this decision', { role: 'auditor' });
-  + await session.task('Audit this decision', { agent: 'auditor' });
-  ```
-
-- **`init({ spawn })` is replaced with explicit profiles and created agents.** Use `defineAgentProfile(...)` for reusable behavioral configuration and `createAgent(...)` for runtime initialization such as sandbox, cwd, and persistence. Agent modules default-export their created agent; workflows pass a local created agent to `init(agent)` after any request-level checks. For persistent agents, creation receives stable `id` and `payload: undefined`, so incoming message contents cannot accidentally choose resources shared by later messages. For workflows, creation receives the workflow payload because each workflow instance is invocation-scoped.
-
-- **`getVirtualSandbox()` now throws with a migration message.** The previous API described R2 as if it were mounted directly as the harness filesystem, but `@cloudflare/shell` Workspaces are SQLite-indexed filesystems with optional R2 blob spillover; raw bucket keys uploaded outside Workspace were invisible. Migrate bucket-backed workflows to `getShellSandbox({ workspace, loader })` plus `hydrateFromBucket(workspace, env.BUCKET)` before initializing a created agent with `init(agent)`. If you used zero-arg `getVirtualSandbox()`, remove it and omit `sandbox` from the created agent config to use Flue's default in-memory sandbox.
-
-### Fixes & Other Changes
-
-- **Reject oversized persisted run events.** Flue fails runs that emit event payloads beyond the configured persistence limit instead of attempting to store them, avoiding excessive run-history storage work while preserving lifecycle cleanup. The limit was originally 256 KB and is increased to 1 MB in the unreleased observability work above.
-
-- **Workflow runs and agent interactions now have separate lifecycle models.** Workflows retain persisted runs, `runId`, `/runs` inspection, and `run_start` / `run_end`. Direct agent HTTP calls still support regular JSON responses and `Accept: text/event-stream`, but direct and dispatched agent inputs execute inside persistent sessions and emit agent lifecycle events instead of workflow run boundaries. Dispatched delivery is correlated by `dispatchId`. Workflow HTTP calls default to fire-and-forget admission with `202 { status: "accepted", runId }`; use `?wait=result` for a synchronous JSON result envelope or `Accept: text/event-stream` to stream workflow run events. `flue run` and `flue logs` remain workflow-run tooling.
-
-- **Workers AI streaming uses less CPU while parsing SSE responses.** The Cloudflare Workers AI provider now avoids unnecessary parsing overhead in streamed responses, which matters most for long outputs and high-concurrency Worker deployments.
-
-- **Examples and docs were migrated to the new model.** One-shot examples now live under `workflows/`, message-driven examples demonstrate direct agent delivery and application-owned dispatch, and `examples/chat-sdk` shows provider ingress and outbound actions composed through a custom application boundary.
+- **`getVirtualSandbox()` now throws with a migration message.** The previous API described R2 as if it were mounted directly as the harness filesystem, but `@cloudflare/shell` Workspaces are SQLite-indexed filesystems with optional R2 blob spillover; raw bucket keys uploaded outside Workspace were invisible. Migrate bucket-backed agents to `getShellSandbox({ workspace, loader })` plus `hydrateFromBucket(workspace, env.BUCKET)` before `init()`. If you used zero-arg `getVirtualSandbox()`, remove it and omit `sandbox` from `init()` to use Flue's default in-memory sandbox.
 
 ## 0.6.2 - 2026-05-14
 
