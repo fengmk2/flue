@@ -113,11 +113,11 @@ Provider keys belong in environment variables, either in the Render Dashboard or
 - `OPENAI_API_KEY` for OpenAI.
 - `OPENROUTER_API_KEY` for OpenRouter.
 
-If your app reads a model ID from the environment, set it next to the matching provider key:
+If your app reads a model specifier from the environment, set it next to the matching provider key:
 
 ```yaml
 envVars:
-  - key: MODEL_ID
+  - key: MODEL_SPECIFIER
     value: anthropic/claude-sonnet-4-6
   - key: ANTHROPIC_API_KEY
     sync: false

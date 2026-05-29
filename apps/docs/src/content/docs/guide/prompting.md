@@ -63,7 +63,8 @@ Without a structured `result` option, a successful prompt resolves to a text res
 | --- | --- |
 | `response.text` | Assistant text generated for the operation. |
 | `response.usage` | Aggregated token and cost usage for model work performed by the operation. |
-| `response.model.id` | Model selected for the operation's primary call after defaults and overrides are applied. |
+| `response.model.provider` | Provider ID selected for the operation's primary call after defaults and overrides are applied. |
+| `response.model.id` | Model ID selected within that provider for the operation's primary call. |
 
 ```ts title=".flue/workflows/draft-email.ts"
 import { createAgent, type FlueContext } from '@flue/runtime';
@@ -277,7 +278,7 @@ See [Tools](/docs/guide/tools/) for defining reusable tools, choosing their scop
 
 ## Measure usage and selected model
 
-Both text and structured responses expose `usage` and `model.id`:
+Both text and structured responses expose `usage` and the selected model identity as `{ provider, id }`:
 
 ```ts title=".flue/workflows/measure-summary.ts"
 import { createAgent, type FlueContext } from '@flue/runtime';
@@ -293,7 +294,7 @@ export async function run({ init, payload }: FlueContext<{ content: string }>) {
 
   return {
     text: response.text,
-    model: response.model.id,
+    model: response.model,
     tokens: {
       input: response.usage.input,
       output: response.usage.output,

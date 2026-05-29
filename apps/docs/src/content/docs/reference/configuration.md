@@ -335,7 +335,7 @@ A `flue.config.*` file never selects a model, registers provider credentials, ad
 | You need to configure… | Put it in… | Continue reading… |
 | --- | --- | --- |
 | Build target, source root, generated output | `flue.config.ts` or one-time CLI flags | This reference and the [CLI reference](/docs/cli/overview/) |
-| Provider registration, model IDs, or operation model choices | Authored agent/application runtime code, including `app.ts` where provider setup is needed | [Models & Providers](/docs/guide/models/) |
+| Provider registration, model specifiers, or operation model choices | Authored agent/application runtime code, including `app.ts` where provider setup is needed | [Models & Providers](/docs/guide/models/) |
 | Middleware, authentication, mounted prefixes, or custom endpoints | Authored `app.ts` and route exports | [Routing](/docs/guide/routing/) |
 | Agents, workflows, and source layout | `agents/`, `workflows/`, and optional `app.ts` under the chosen source layout | [Project Layout](/docs/guide/project-layout/) |
 | Cloudflare bindings and Wrangler deployment resources | Project-root Wrangler configuration | [Deploy on Cloudflare](/docs/ecosystem/deploy/cloudflare/) |

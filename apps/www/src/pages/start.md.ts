@@ -56,14 +56,14 @@ Determine the following. Ask the user only for information you do not already kn
 ${await getDeployGuideList()}
    - If they choose a host without a deploy guide, use the Node.js guide as the baseline unless they ask for something else.
 4. Do they have an LLM provider/model in mind?
-   - Optional, but recommended. Setup is easier if you know which provider they plan to use, because you can scaffold the right model identifier and environment variable names.
-   - We suggest these exact model IDs:
+   - Optional, but recommended. Setup is easier if you know which provider they plan to use, because you can scaffold the right model specifier and environment variable names.
+   - We suggest these exact model specifiers:
      - \`anthropic/claude-sonnet-4-6\` - latest Sonnet
      - \`anthropic/claude-opus-4-7\` - latest Opus
      - \`openai/gpt-5.5\` - GPT-5.5
      - \`openrouter/moonshotai/kimi-k2.6\` - latest Kimi
-   - If the user wants a different provider or model, use this list to get the best model ID: \`https://flueframework.com/models.json\`
-   - If their requested model is unavailable, ask before substituting another model. Don't continue until you have a model ID.
+   - If the user wants a different provider or model, use this list to get the best model specifier: \`https://flueframework.com/models.json\`
+   - If their requested model is unavailable, ask before substituting another model. Don't continue until you have a model specifier.
 
 Before implementing, restate the chosen requirements to yourself as an implementation contract:
 
@@ -74,7 +74,7 @@ Before implementing, restate the chosen requirements to yourself as an implement
 - Agent module path: \`./agents/<name>.ts\` or \`./.flue/agents/<name>.ts\`
 - Workflow module path, if needed: \`none\`, \`./workflows/<name>.ts\`, or \`./.flue/workflows/<name>.ts\`
 - Deploy target: \`<target>\`
-- Provider/model: \`<exact model id>\`
+- Model specifier: \`<exact model specifier>\`
 
 ## Step 3: Build the Smallest Useful Starter Project
 
@@ -83,7 +83,7 @@ Before implementing, restate the chosen requirements to yourself as an implement
 2. Create or update the project in the requested directory using the selected source layout.
 3. Always create one minimal **agent module** matching the user's idea, keeping it closer to "hello world" than a production app.
    - Put it in the selected layout's immediate \`agents/\` directory, using a lower-kebab-case filename such as \`agents/hello-world.ts\`.
-   - It must default-export \`createAgent(() => ({ model: '<exact model id>', instructions: '<short purpose-specific instruction>' }))\`.
+   - It must default-export \`createAgent(() => ({ model: '<exact model specifier>', instructions: '<short purpose-specific instruction>' }))\`.
    - Do not export \`route\` or \`websocket\` unless the user needs direct HTTP or WebSocket access. For a basic local starter, use \`flue connect <agent-name> local\` instead.
 4. If the selected shape is **agent + workflow**, create one minimal **workflow module** for the finite job.
    - Put it in the selected layout's immediate \`workflows/\` directory, using a lower-kebab-case filename.
@@ -119,13 +119,13 @@ Before finishing, verify that the implementation matches the user's explicit cho
 - **Agent module**: One agent module exists in \`agents/<name>.ts\` or \`.flue/agents/<name>.ts\` and default-exports \`createAgent(...)\`.
 - **Workflow choice**: No workflow was added for an agent-only starter; for an agent + workflow starter, one workflow module initializes the created agent with \`init(agent)\`.
 - **Deploy target**: Config and commands match the user's selected deploy target.
-- **LLM provider/model**: Model identifier is one of the suggested exact IDs, or an exact value from \`https://flueframework.com/models.json\` if the user requested another model.
+- **LLM provider/model**: Model specifier is one of the suggested values, or an exact value from \`https://flueframework.com/models.json\` if the user requested another model.
 - **Secrets**: No fake API keys, tokens, or secrets were invented.
 - **Dependencies**: Only dependencies required by the selected deploy guide and starter shape were added.
 
 If any item does not match the user's choices, fix it before you finish.
 
-In your final response, include a short checklist with the project directory, source layout, agent module path, workflow module path or \`none\`, deploy target, model ID, and validation result.
+In your final response, include a short checklist with the project directory, source layout, agent module path, workflow module path or \`none\`, deploy target, model specifier, and validation result.
 
 ## Important Instructions and Constraints to be Successful
 

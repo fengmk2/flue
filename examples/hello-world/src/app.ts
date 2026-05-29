@@ -2,7 +2,7 @@
 import { configureProvider, flue, registerProvider } from '@flue/runtime/app';
 import { Hono } from 'hono';
 
-// Brand-new prefixes for local OpenAI-compatible servers.
+// Brand-new provider IDs for local OpenAI-compatible servers.
 registerProvider('ollama', {
 	api: 'openai-completions',
 	baseUrl: 'http://localhost:11434/v1',

@@ -1,255 +1,101 @@
 ---
 title: Models & Providers
 description: Select models, configure providers, and tune reasoning behavior in Flue agents.
+lastReviewedAt: 2026-05-29
 ---
 
-A Flue agent does not receive an implicit LLM choice. Configure the model that should handle ordinary operations, then override it only where a particular operation needs different cost, speed, or capability characteristics.
+Models determine what kind of work an agent can perform. Providers determine how your application reaches those models, authenticates its requests, and applies any transport-specific configuration.
 
-This guide shows how to:
+This guide covers model selection and provider setup. For configuring addressable agents, see [Agents](/docs/guide/building-agents/). For running model-driven work inside finite orchestration, see [Workflows](/docs/guide/workflows/). For operation inputs and results, see [Prompting](/docs/guide/prompting/).
 
-- choose model identifiers;
-- set model and reasoning defaults in created agents or reusable profiles;
-- override those defaults for an individual operation;
-- supply credentials and configure or register providers; and
-- use binding-backed Cloudflare Workers AI models on the Cloudflare target.
+## Model specifier
 
-For configuring addressable agents, see [Agents](/docs/guide/building-agents/). For initializing agents during finite orchestration, see [Workflows](/docs/guide/workflows/). For operation results and options beyond model selection, see [Prompting](/docs/guide/prompting/).
+A model specifier is the unique string Flue uses to refer to a specific model across providers. It combines a provider ID, such as `anthropic`, `cloudflare`, `openai`, or `openrouter`, with a model ID recognized by that provider:
 
-## Choose a model identifier
-
-Model strings use this format:
-
-```text
-provider/model-id
-```
-
-The portion before the first slash selects the provider prefix. Everything after it identifies the model for that provider and may itself contain slashes. For example:
-
-| Model string | Provider prefix | Model id |
+| Model specifier | Provider ID | Model ID |
 | --- | --- | --- |
 | `anthropic/claude-sonnet-4-6` | `anthropic` | `claude-sonnet-4-6` |
 | `openai/gpt-5.5` | `openai` | `gpt-5.5` |
 | `openrouter/moonshotai/kimi-k2.6` | `openrouter` | `moonshotai/kimi-k2.6` |
 | `cloudflare/@cf/moonshotai/kimi-k2.6` | `cloudflare` | `@cf/moonshotai/kimi-k2.6` |
 
-Built-in provider prefixes resolve models from the runtime model catalog. If you use a catalog provider with an unknown model id, initialization or the overriding operation fails rather than silently selecting another model. A prefix that your application registers with `registerProvider(...)` resolves through that registration instead; see [Register a provider](#register-a-provider).
+Use a model specifier to choose an agent's default model:
 
-A **created agent** must establish its model intent before Flue can initialize its environment. Its `createAgent(...)` initializer must return one of:
-
-- a `model: 'provider/model-id'` default;
-- `model: false`, explicitly declaring that there is no default model; or
-- a `profile` whose `model` property is a model string or `false`.
-
-```ts title=".flue/workflows/summarize.ts"
-import { createAgent, type FlueContext } from '@flue/runtime';
-
-const writer = createAgent(() => ({
-  model: 'anthropic/claude-sonnet-4-6',
-}));
-
-export async function run({ init }: FlueContext) {
-  const harness = await init(writer);
-  const session = await harness.session();
-  return session.prompt('Summarize the release notes.');
-}
-```
-
-The model choice is part of agent behavior: it influences available capabilities, latency, pricing, context limits, and whether a requested reasoning mode or input type is supported. Choose a default that is suitable for the agent's normal work rather than relying on each caller to remember one.
-
-## Set an agent default
-
-Put the ordinary model and reasoning settings on the created agent when that behavior is specific to one agent:
-
-```ts
+```ts title="src/agents/assistant.ts"
 import { createAgent } from '@flue/runtime';
 
-const supportAgent = createAgent(() => ({
+export default createAgent(() => ({
   model: 'anthropic/claude-sonnet-4-6',
-  thinkingLevel: 'medium',
-  instructions: 'Give accurate, concise customer-support answers.',
 }));
 ```
 
-The initializer may use its context to choose configuration at initialization time. For example, an application can select a configured default according to deployment, tenant policy, or payload metadata while still returning an explicit `model` value.
+Model specifiers can also be supplied by reusable profiles and subagents, or used to override the default model for an individual prompt, skill, or task operation. Responses report the selected model as `{ provider, id }`, preserving the provider ID and model ID from this specifier. See [Agents](/docs/guide/building-agents/), [Subagents](/docs/guide/subagents/), and [Prompting](/docs/guide/prompting/) for those API-specific behaviors.
 
-### Reuse defaults with a profile
+## Model reasoning effort
 
-Use `defineAgentProfile(...)` when model behavior belongs to a reusable agent profile, such as a role used by more than one created agent or as a declared subagent:
-
-```ts
-import { createAgent, defineAgentProfile } from '@flue/runtime';
-
-const carefulWriter = defineAgentProfile({
-  model: 'anthropic/claude-sonnet-4-6',
-  thinkingLevel: 'high',
-  instructions: 'Check claims carefully before writing.',
-});
-
-const releaseNotesAgent = createAgent(() => ({
-  profile: carefulWriter,
-}));
-```
-
-A profile supplied to `createAgent(...)` can carry the required model intent. If the initializer also returns scalar configuration such as `model` or `thinkingLevel`, that created-agent field replaces the corresponding profile value. This is useful for adapting a profile while retaining its other behavior:
-
-```ts
-const economicalReleaseNotesAgent = createAgent(() => ({
-  profile: carefulWriter,
-  model: 'anthropic/claude-haiku-4-5',
-  thinkingLevel: 'low',
-}));
-```
-
-### Deliberately omit a default with `model: false`
-
-Set `model: false` only when the application is intended to choose a model for every model-using operation:
-
-```ts
-import { createAgent, type FlueContext } from '@flue/runtime';
-
-const router = createAgent(() => ({
-  model: false,
-}));
-
-export async function run({ init }: FlueContext) {
-  const harness = await init(router);
-  const session = await harness.session();
-
-  return session.prompt('Extract the key entities.', {
-    model: 'openai/gpt-5.5',
-  });
-}
-```
-
-`model: false` satisfies the initialization requirement, but it does **not** select a fallback model. A later `prompt()` or `skill()` that needs a model fails unless it supplies a model override. For `task()`, a selected named subagent can instead provide its own model; an anonymous task still needs an available parent default or call-level override. In particular, an addressable agent that receives direct HTTP or WebSocket prompts should normally have a configured default, because those direct inputs do not let the client pass Flue's in-process `prompt(..., { model })` option.
-
-## Override the model for one operation
-
-Pass `model` to `session.prompt(...)` when one operation needs a specialized model. For example, keep an economical default for routine work and request a more capable model for a difficult synthesis step:
-
-```ts
-const analyst = createAgent(() => ({
-  model: 'anthropic/claude-haiku-4-5',
-}));
-
-export async function run({ init }: FlueContext) {
-  const harness = await init(analyst);
-  const session = await harness.session();
-
-  const classification = await session.prompt('Classify the ticket priority.');
-  const recommendation = await session.prompt('Prepare a risk-aware resolution plan.', {
-    model: 'anthropic/claude-sonnet-4-6',
-  });
-
-  return { classification, recommendation };
-}
-```
-
-For `prompt()` and `skill()`, model precedence is:
-
-```text
-operation model override > configured agent or profile default
-```
-
-For `task()`, selecting a named subagent introduces one additional default:
-
-```text
-operation model override > selected subagent profile model > parent agent or profile default
-```
-
-The override lasts only for that operation. It does not change the session's configured default for the next call.
-
-The same `model` option is available on `session.skill(...)` and `session.task(...)`:
-
-```ts
-await session.skill('review', {
-  model: 'anthropic/claude-sonnet-4-6',
-});
-
-await session.task('Perform a detailed security assessment.', {
-  model: 'anthropic/claude-sonnet-4-6',
-});
-```
-
-For details about prompt calls, structured output, usage metadata, images, and cancellation, continue to [Prompting](/docs/guide/prompting/).
-
-## Configure reasoning effort
-
-Use `thinkingLevel` to express how much reasoning effort Flue should request for model-facing work. The supported values are:
+Reasoning effort controls how much additional reasoning Flue requests from a model. Set it with `thinkingLevel`, using one of the supported levels:
 
 | Value | Intent |
 | --- | --- |
 | `'off'` | Do not request additional reasoning. |
 | `'minimal'` | Request the smallest reasoning effort. |
 | `'low'` | Favor lower reasoning cost or latency. |
-| `'medium'` | Balanced effort; the current framework default. |
+| `'medium'` | Balance reasoning effort and cost. This is Flue's default. |
 | `'high'` | Favor more careful reasoning. |
 | `'xhigh'` | Request the highest exposed effort tier. |
 
-Configure the normal level on the agent or its profile, then override it on an individual operation where appropriate:
+Set the ordinary reasoning effort for an agent alongside its model:
 
-```ts
-import { createAgent, type FlueContext } from '@flue/runtime';
+```ts title="src/agents/reviewer.ts"
+import { createAgent } from '@flue/runtime';
 
-const reviewer = createAgent(() => ({
+export default createAgent(() => ({
   model: 'anthropic/claude-sonnet-4-6',
-  thinkingLevel: 'low',
+  thinkingLevel: 'high',
 }));
-
-export async function run({ init }: FlueContext) {
-  const harness = await init(reviewer);
-  const session = await harness.session();
-
-  const draft = await session.prompt('Draft a short response.');
-  const audit = await session.prompt('Find correctness risks in this proposed response.', {
-    thinkingLevel: 'high',
-  });
-
-  return { draft, audit };
-}
 ```
 
-Reasoning-level precedence is:
+Like a model specifier, `thinkingLevel` can be supplied by a reusable profile or overridden for an individual prompt, skill, or task operation. If no level is configured, Flue uses `'medium'`.
 
-```text
-operation thinkingLevel > configured agent or profile default > framework default ('medium')
-```
+Reasoning support depends on both the selected model and its provider integration. When that path supports `thinkingLevel`, Flue passes your selected level through; unsupported paths ignore the setting, as noted for Workers AI bindings below.
 
-`session.skill(...)` and `session.task(...)` accept the same per-operation `thinkingLevel` option. A named task profile can also supply its own normal reasoning level for work delegated to that profile.
+## Providers
 
-A `thinkingLevel` value is a request, not a promise of identical behavior across models. Whether a level produces reasoning controls, reasoning output, or any observable difference depends on the resolved model and provider protocol. Confirm that the model you select supports the behavior needed by your application, especially when switching providers with an operation-level `model` override.
+A provider is the service through which Flue reaches a model. A model may be available from more than one provider: for example, an Anthropic model may be accessed through Anthropic itself or through a gateway such as OpenRouter. The provider ID in a model specifier identifies that connection path, including its available models, authentication, billing, and transport behavior. Flue preserves this selected provider ID when reporting the model used for an operation.
 
-## Supply provider credentials
+### Authentication
 
-For ordinary catalog-backed HTTP providers, put credentials in the environment available to the running Flue application. Common examples in Flue projects are:
+Most hosted providers require credentials before they will accept model requests. Flue uses the provider integrations from [Pi](https://pi.dev/docs/latest/providers), including their standard environment-variable conventions. For built-in providers, making the expected credential available to your running application is normally all that is required:
 
-| Provider prefix | Typical environment variable |
+| Provider ID | Environment variable |
 | --- | --- |
 | `anthropic` | `ANTHROPIC_API_KEY` |
 | `openai` | `OPENAI_API_KEY` |
 | `openrouter` | `OPENROUTER_API_KEY` |
 
-Do not put credential values in agent modules, profiles, prompts, or committed configuration files.
+Keep credential values out of agent modules and committed configuration files. During local development, Node commands load explicit environment files with `--env`, while Cloudflare development uses `.env` or `.dev.vars` through its Workers tooling. See [Configuration](/docs/reference/configuration/) for local environment setup on each target.
 
-For Node.js local development and one-shot workflow runs, supply environment files through the Node commands documented in [Configuration](/docs/reference/configuration/) and [Deploy on Node.js](/docs/ecosystem/deploy/node/). For example, a Node-target application can use `flue dev --target node --env .env` after storing its provider variable in an ignored `.env` file.
+Some provider paths authenticate through their platform integration instead of a model-provider API key. In particular, the binding-backed `cloudflare/...` provider uses your Worker's `AI` binding, as described in [Cloudflare Workers AI](#cloudflare-workers-ai-cloudflare-only).
 
-For local Cloudflare development, use Wrangler/Vite local variable conventions: place local variables in `.dev.vars` or `.env` beside your Wrangler configuration, and run:
+### Built-in providers
 
-```bash
-pnpm exec flue dev --target cloudflare
-```
+Flue includes Pi's catalog-backed providers and models. To use a built-in provider, choose one of its supported model specifiers and make its required credentials available at runtime; you do not need to register the provider in application code.
 
-Do not pass `--env` to Cloudflare development: the Cloudflare target uses the official Vite integration's variable loading rather than Flue's Node env-file option. See [Deploy on Cloudflare](/docs/ecosystem/deploy/cloudflare/) for Worker configuration and deployment setup.
+See Pi's [provider documentation](https://pi.dev/docs/latest/providers) for the built-in providers, their supported authentication variables, and their model catalog.
 
-Binding-backed Workers AI is different from these HTTP-provider credential flows: a `cloudflare/...` model uses the Worker's `AI` binding and does not use a model-provider API key. See [Use Workers AI on Cloudflare](#use-workers-ai-on-cloudflare).
+### Cloudflare providers
 
-## Configure a built-in provider
+Cloudflare provides several ways to reach models from a Flue application. Choose the provider ID that matches how you want calls to be executed:
 
-Place provider runtime setup in the application's `app.ts`, not in each agent or operation module. Import `configureProvider(...)` from `@flue/runtime/app` to adjust transport settings for an already-resolvable provider while retaining catalog model metadata such as capability and token-limit information.
+- `cloudflare/...` uses Flue's Workers AI binding integration. It requires the Cloudflare target and an `AI` binding, and is covered in [Cloudflare Workers AI](#cloudflare-workers-ai-cloudflare-only) below.
+- `cloudflare-workers-ai/...` uses URL-backed [Workers AI](https://developers.cloudflare.com/workers-ai/) access through the Cloudflare API. It can be used from Node.js or Cloudflare applications with the applicable credentials.
+- `cloudflare-ai-gateway/...` uses URL-backed [Cloudflare AI Gateway](https://developers.cloudflare.com/ai-gateway/) access. It can be used from Node.js or Cloudflare applications when you want gateway-managed observability and controls.
 
-For example, route Anthropic models through an application-configured gateway endpoint and key:
+### Built-in provider overrides
 
-```ts title=".flue/app.ts"
+Use `configureProvider(...)` in `src/app.ts` when a built-in provider should retain its known model catalog but send requests through application-specific transport configuration, such as an AI gateway or proxy.
+
+```ts title="src/app.ts"
 import { configureProvider, flue } from '@flue/runtime/app';
 import { Hono } from 'hono';
 
@@ -266,34 +112,21 @@ app.route('/', flue());
 export default app;
 ```
 
-`configureProvider(provider, settings)` supports these transport settings:
+A provider override can change its endpoint, API key, or headers without changing the provider ID used in your model specifiers. It can also opt into hosted response persistence for supported OpenAI Responses API providers. Keep this runtime setup in `app.ts` rather than repeating it in agents or individual operations.
 
-| Setting | Purpose |
-| --- | --- |
-| `baseUrl` | Send calls for the resolved provider to a different endpoint, such as an AI gateway or proxy. |
-| `headers` | Merge additional default headers into outgoing calls. |
-| `apiKey` | Supply the API key used for that provider at runtime. |
-| `storeResponses` | For OpenAI Responses API or Azure OpenAI Responses API models only, send `store: true` when you intentionally want hosted response-item persistence. |
+### Custom providers
 
-Provider configuration is keyed by the provider slug of the resolved model. For built-in catalog models this is normally the familiar prefix, such as `anthropic`. A registered provider can set a different provider slug; configure that resolved slug if you need to patch its transport settings.
+Use `registerProvider(...)` in `src/app.ts` when you want to connect Flue to a model provider that is not built in. Registering a provider assigns it a provider ID, which you can then use in model specifiers throughout your application.
 
-For authentication, an explicitly configured `apiKey` overrides a key on a provider registration. When neither is configured, the underlying provider integration performs its normal environment-variable lookup. This lets ordinary catalog providers use their usual environment credentials while gateways and private endpoints can be configured centrally.
+For example, you can register a local Ollama server through its OpenAI-compatible endpoint:
 
-## Register a provider
-
-Use `registerProvider(...)` in `app.ts` when you need a new model prefix, such as a locally hosted or proxy-hosted OpenAI-compatible endpoint. The selected prefix then works in any `model: 'prefix/model-id'` configuration.
-
-This example registers a local OpenAI-compatible Ollama endpoint, following the application's existing provider pattern:
-
-```ts title=".flue/app.ts"
+```ts title="src/app.ts"
 import { flue, registerProvider } from '@flue/runtime/app';
 import { Hono } from 'hono';
 
 registerProvider('ollama', {
   api: 'openai-completions',
   baseUrl: 'http://localhost:11434/v1',
-  contextWindow: 8192,
-  maxTokens: 2048,
 });
 
 const app = new Hono();
@@ -302,57 +135,25 @@ app.route('/', flue());
 export default app;
 ```
 
-An agent can now select a model id provided by that endpoint:
+The registered provider ID is now available anywhere you select a model:
 
-```ts
+```ts title="src/agents/local-assistant.ts"
 import { createAgent } from '@flue/runtime';
 
-const localAgent = createAgent(() => ({
+export default createAgent(() => ({
   model: 'ollama/llama3.1:8b',
 }));
 ```
 
-For an authenticated OpenAI-compatible proxy, include `apiKey` and optionally headers in the registration, reading values from runtime environment configuration rather than embedding them in source:
+A provider registration can also supply authentication, headers, and model metadata when your endpoint requires them. Most OpenAI-compatible services can use the built-in `openai-completions` protocol shown above. For an endpoint with a different wire protocol, advanced integrations can register that protocol with `registerApiProvider(...)` before registering a provider ID for it.
 
-```ts
-registerProvider('private-gateway', {
-  api: 'openai-completions',
-  baseUrl: process.env.LLM_GATEWAY_URL!,
-  apiKey: process.env.LLM_GATEWAY_API_KEY,
-  contextWindow: 128000,
-  maxTokens: 8192,
-});
-```
+Choose a new provider ID unless you intend to replace a built-in connection path. For example, registering `cloudflare` yourself replaces Flue's generated `cloudflare/...` binding configuration, which is how the customization below takes effect.
 
-Registered HTTP providers supply endpoint and protocol information, but they do not automatically provide catalog metadata for arbitrary model ids. If your application relies on accurate context-window-aware compaction behavior, set `contextWindow` and `maxTokens`, or supply per-model values:
+## Cloudflare Workers AI (Cloudflare only)
 
-```ts
-registerProvider('private-gateway', {
-  api: 'openai-completions',
-  baseUrl: process.env.LLM_GATEWAY_URL!,
-  apiKey: process.env.LLM_GATEWAY_API_KEY,
-  models: {
-    'small-chat': { contextWindow: 32000, maxTokens: 4096 },
-    'long-context': { contextWindow: 200000, maxTokens: 8192 },
-  },
-});
-```
+For applications built with `--target cloudflare`, Flue provides the `cloudflare/...` provider ID for running model calls through a [Workers AI](https://developers.cloudflare.com/workers-ai/) binding. This path uses the binding attached to your Worker rather than URL-backed provider credentials.
 
-A registration takes precedence over catalog resolution for the same prefix:
-
-```text
-registered provider prefix > built-in catalog provider prefix
-```
-
-Registrations are last-write-wins. Avoid registering a prefix such as `anthropic`, `openai`, or `cloudflare` unless you deliberately intend to replace how every `prefix/...` model resolves in your application. Use `configureProvider(...)` instead when the goal is only to change endpoint, authentication, or headers for an existing provider while preserving its catalog models.
-
-If a service uses a wire protocol not already supported by the runtime, advanced integrations can first register an API protocol implementation with `registerApiProvider(...)` and then expose a model prefix with `registerProvider(...)`. Most OpenAI-compatible gateways need only `registerProvider(..., { api: 'openai-completions', ... })`.
-
-## Use Workers AI on Cloudflare
-
-On the Cloudflare target, Flue provides a binding-backed provider for Workers AI. Select it with the `cloudflare` prefix and a Workers AI model id such as `@cf/moonshotai/kimi-k2.6`:
-
-```ts title=".flue/agents/assistant.ts"
+```ts title="src/agents/assistant.ts"
 import { createAgent } from '@flue/runtime';
 
 export default createAgent(() => ({
@@ -360,9 +161,7 @@ export default createAgent(() => ({
 }));
 ```
 
-### Add the required binding
-
-Binding-backed models require an `AI` binding in the user-owned Wrangler configuration at the project root:
+Declare an `AI` binding in your project's Wrangler configuration:
 
 ```jsonc title="wrangler.jsonc"
 {
@@ -373,20 +172,13 @@ Binding-backed models require an `AI` binding in the user-owned Wrangler configu
 }
 ```
 
-Build or develop this application with the Cloudflare target. The generated Cloudflare runtime registers the `cloudflare` prefix using `env.AI`, so calls are dispatched through the Worker binding rather than over a provider HTTP endpoint:
+A `cloudflare/...` model call does not need an API key in your application environment. Authorization and billing follow the Worker account associated with the binding, including the [Workers AI pricing and daily free allocation](https://developers.cloudflare.com/workers-ai/platform/pricing/).
 
-```bash
-pnpm exec flue dev --target cloudflare
-pnpm exec flue build --target cloudflare
-```
+### Advanced: Customize AI Gateway behavior
 
-A `cloudflare/...` binding call does not need an API key in your application environment. Authorization is provided by the binding attached to the deployed or locally emulated Worker.
+By default, Flue routes `cloudflare/...` binding calls through Cloudflare AI Gateway with gateway ID `default`. To choose a named gateway, set cache or logging options, or bypass the gateway option, register the `cloudflare` provider ID yourself in `src/app.ts`:
 
-### Customize AI Gateway behavior
-
-By default, the generated Cloudflare integration routes `cloudflare/...` binding calls through Cloudflare AI Gateway with gateway id `default`. To select a named gateway, configure cache/log metadata options, or opt out of passing a gateway, register the `cloudflare` prefix yourself in `app.ts`. User application registration is preserved instead of the generated default registration.
-
-```ts title=".flue/app.ts"
+```ts title="src/app.ts"
 import { env } from 'cloudflare:workers';
 import { flue, registerProvider } from '@flue/runtime/app';
 import { Hono } from 'hono';
@@ -408,16 +200,10 @@ app.route('/', flue());
 export default app;
 ```
 
-To send binding calls without a gateway option, use `gateway: false` in that registration. Gateway options supported by Flue include `id`, `skipCache`, `cacheTtl`, `cacheKey`, `metadata`, `collectLog`, `eventId`, and `requestTimeoutMs`.
+Set `gateway: false` in that registration when you do not want Flue to pass a gateway option. See Cloudflare's [Workers bindings documentation](https://developers.cloudflare.com/ai-gateway/integrations/worker-binding-methods/) for gateway behavior and supported options.
 
-### Reasoning limitation for binding-backed Workers AI
+### Reasoning effort
 
-Flue accepts `thinkingLevel` on agents and operations using `cloudflare/...` because it is part of the general agent API. However, the current binding-backed Workers AI implementation does **not** send `thinkingLevel` or reasoning-effort controls in its `env.AI.run(...)` payload. A Workers AI model may emit reasoning content of its own accord, but do not rely on `thinkingLevel` to control reasoning effort on this provider path.
+For reasoning-capable Workers AI models, Flue passes `thinkingLevel` through the binding as Cloudflare's shared `reasoning_effort` option. Workers AI exposes `low`, `medium`, and `high`, so Flue maps `'minimal'` to `low` and `'xhigh'` to `high`.
 
-### Do not confuse binding and URL-backed Cloudflare providers
-
-`cloudflare/...` specifically means Flue's binding-backed Workers AI integration and requires the Cloudflare target plus `env.AI` binding. It is distinct from URL-backed catalog providers such as `cloudflare-workers-ai/...` or `cloudflare-ai-gateway/...`, which make HTTP provider calls and require their applicable Cloudflare API credentials in environment configuration.
-
-Use the binding-backed form when your Worker should call Workers AI through its platform binding. Use a URL-backed Cloudflare catalog provider only when your application intentionally needs that HTTP credential-and-endpoint flow.
-
-Continue to [Build & Deploy](/docs/guide/deployment/) for target and durability decisions, [Deploy on Cloudflare](/docs/ecosystem/deploy/cloudflare/) for platform configuration, [Configuration](/docs/reference/configuration/) for application setup boundaries, [Agents](/docs/guide/building-agents/) for continuing session behavior, and [Workflows](/docs/guide/workflows/) for initializing model-driven work inside finite operations.
+Cloudflare also documents model-specific thinking switches for some models. Flue does not translate those individual switches: `thinkingLevel: 'off'` makes no additional reasoning-effort request, but it may not disable reasoning that a selected Workers AI model enables by default.

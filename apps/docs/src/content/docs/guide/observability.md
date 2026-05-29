@@ -323,7 +323,7 @@ A single `session.prompt(...)` may perform multiple model turns, especially when
 | `turn_request` | The normalized request about to be sent to the model. |
 | `turn` | The normalized terminal model output, timing, usage, and failure state. |
 
-`turn_request` and `turn` share a `turnId`. `turn_request` includes the model/provider/API identity, effective reasoning setting when present, model-visible messages, system prompt, and available tool definitions. `turn` includes normalized assistant output, duration, usage/cost, stop reason, and error status.
+`turn_request` and `turn` share a `turnId`. `turn_request` includes `provider` (the selected provider ID), `model` (that provider's model ID), and `api` (the transport implementation), along with the effective reasoning setting when present, model-visible messages, system prompt, and available tool definitions. `turn` exposes the selected identity when available together with normalized assistant output, duration, usage/cost, stop reason, and error status.
 
 For example, an exporter can represent a tool-using prompt as:
 

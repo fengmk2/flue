@@ -5,7 +5,6 @@ import { bot, registerChatHandlers } from './chat.ts';
 
 registerProvider('chat-sdk-example', {
 	api: 'chat-sdk-example',
-	provider: 'chat-sdk-example',
 	baseUrl: '',
 });
 registerChatHandlers(assistant);

@@ -55,7 +55,7 @@ const reviewer = defineAgentProfile({
 | --- | --- | --- |
 | `name` | `string` | Optional profile name; required when a profile is selectable as a subagent. |
 | `description` | `string` | Model-facing or application-facing description of the profile role. |
-| `model` | `string \| false` | Default model selection intent. `false` deliberately supplies no default model. |
+| `model` | `string \| false` | Default model specifier. `false` deliberately supplies no default model. |
 | `instructions` | `string` | Instructions prepended to discovered workspace context. |
 | `skills` | `Skill[]` | Registered skill definitions or packaged skill references. |
 | `tools` | `ToolDefinition[]` | Custom model-callable tools. |

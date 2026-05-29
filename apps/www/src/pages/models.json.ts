@@ -4,7 +4,7 @@ const modelsUrl = "https://unpkg.com/@earendil-works/pi-ai/dist/models.generated
 
 type ModelRegistry = Record<string, Record<string, unknown>>;
 
-async function extractModelIds(source: string) {
+async function extractModelSpecifiers(source: string) {
   const moduleUrl = `data:text/javascript;base64,${Buffer.from(source).toString("base64")}`;
   const { MODELS } = (await import(moduleUrl)) as { MODELS?: ModelRegistry };
 
@@ -12,15 +12,15 @@ async function extractModelIds(source: string) {
     throw new Error(`No MODELS export found in ${modelsUrl}`);
   }
 
-  const ids: string[] = [];
+  const specifiers: string[] = [];
 
-  for (const [provider, models] of Object.entries(MODELS)) {
+  for (const [providerId, models] of Object.entries(MODELS)) {
     for (const modelId of Object.keys(models)) {
-      ids.push(`${provider}/${modelId}`);
+      specifiers.push(`${providerId}/${modelId}`);
     }
   }
 
-  return ids;
+  return specifiers;
 }
 
 export const GET: APIRoute = async () => {
@@ -30,13 +30,13 @@ export const GET: APIRoute = async () => {
     throw new Error(`Failed to fetch model list from ${modelsUrl}: ${response.status} ${response.statusText}`);
   }
 
-  const modelIds = await extractModelIds(await response.text());
+  const modelSpecifiers = await extractModelSpecifiers(await response.text());
 
-  if (modelIds.length === 0) {
-    throw new Error(`No model IDs found in ${modelsUrl}`);
+  if (modelSpecifiers.length === 0) {
+    throw new Error(`No model specifiers found in ${modelsUrl}`);
   }
 
-  return new Response(JSON.stringify(modelIds, null, 2), {
+  return new Response(JSON.stringify(modelSpecifiers, null, 2), {
     headers: {
       "Content-Type": "application/json; charset=utf-8",
     },

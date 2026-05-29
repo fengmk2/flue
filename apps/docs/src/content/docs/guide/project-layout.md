@@ -4,7 +4,7 @@ description: Understand the source files and generated output in a Flue project.
 lastReviewedAt: 2026-05-29
 ---
 
-Flue uses file-based conventions to structure your application. Where you place an agent, workflow, or application entrypoint determines how Flue discovers and builds it. This guide introduces the recommended project layout and the directories you can customize as your application grows.
+Flue discovers application entrypoints from your project's source directory. Use `src/` for new projects, with `app.ts`, `agents/`, and `workflows/` defining the application surfaces Flue builds.
 
 ## Example project layout
 
@@ -21,7 +21,7 @@ my-project/
 └─ dist/
 ```
 
-You can organize your application code however you prefer inside the source directory. However, be aware that certain files and folders have special meaning and are reserved by Flue for certain purposes, as covered below.
+Organize supporting application code however you prefer inside `src/`. The files and directories below are the parts of your application that Flue discovers and builds automatically.
 
 ## Important files and directories
 
@@ -53,21 +53,21 @@ Keep workflow files flat inside `workflows/`; nested files are not discovered as
 
 For more information, see [Workflows](/docs/guide/workflows/).
 
-## Customizing the `src/` directory
+## Source directory
 
-Flue uses `src/` as its recommended source directory. If your project needs a different layout, Flue supports authored source files in three locations, checked in the following priority order:
+`src/` is the canonical source directory for new Flue projects. When integrating Flue into another application or maintaining an existing layout, authored modules may instead live in `.flue/` or at the project root. Flue selects one source directory in this order:
 
-1. `.flue/` — Use this when adding Flue to a larger existing application, such as for GitHub or GitLab CI automation.
-2. `src/` **(Recommended)** — This is the recommended layout for new projects and keeps all source files in the familiar `src/` directory.
-3. The project root — Use this when you prefer a small, focused project without a source directory. Although we recommend either of the directories above, this layout is supported for developers who prefer it.
+1. `.flue/` — A self-contained Flue source area inside a larger application.
+2. `src/` **(Recommended)** — The recommended layout for new projects.
+3. The project root — A compact layout for small dedicated projects.
 
-The first matching directory wins. For example, if  `.flue/` exists, modules in `src/` and the project root are ignored and not discovered (unless imported from within the `.flue` directory, however reaching outside of the source directory like this is not recommended).
+The first matching directory wins. Flue does not merge layouts: when `.flue/` exists, it does not discover agents, workflows, or `app.ts` from `src/` or the project root. Authored modules may still import ordinary supporting code from elsewhere in the project.
 
 The source directory is always discovered relative to your project root. To configure the project root, see [Configuration](/docs/reference/configuration/).
 
-## Customizing the `dist/` directory
+## Output directory
 
-`dist/` is the default output directory for generated build artifacts. It is created at the project root when you build the application; it is not part of authored source discovery.
+`dist/` is the default output directory for generated build artifacts. It is created at the project root when you build the application and is never part of authored source discovery.
 
 To change where generated artifacts are written, set `output` in `flue.config.ts`:
 

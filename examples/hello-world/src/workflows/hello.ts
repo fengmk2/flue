@@ -16,10 +16,11 @@ export async function run({ init, log }: FlueContext) {
 	log.info('solved arithmetic prompt', {
 		answer: response.data.answer,
 		tokens: response.usage.totalTokens,
+		provider: response.model.provider,
 		model: response.model.id,
 	});
 	console.log('[hello] 2 + 2 =', response.data.answer);
-	console.log('[hello] usage:', response.usage.totalTokens, 'tokens, model:', response.model.id);
+	console.log('[hello] usage:', response.usage.totalTokens, 'tokens, model:', `${response.model.provider}/${response.model.id}`);
 
 	// Test: read a workspace file via shell
 	const cat = await session.shell('cat AGENTS.md');

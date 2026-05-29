@@ -42,12 +42,12 @@ const agent = createAgent(() => ({
 
 | Option      | Required | Description                                               |
 | ----------- | -------- | --------------------------------------------------------- |
-| `model`     | Yes      | Provider/model identifier used for operations by default. |
-| `subagents` | No       | Reusable profiles available to tasks.                     |
-| `tools`     | No       | Tools available within agent operations.                  |
+| `model`     | Yes      | Model specifier used for operations by default. |
+| `subagents` | No       | Reusable profiles available to tasks.           |
+| `tools`     | No       | Tools available within agent operations.        |
 
-<Callout kind="tip" title="Provider identifiers">
-	Model identifiers use the `provider/model-id` form. Provider credentials are supplied through
+<Callout kind="tip" title="Model specifiers">
+	A model specifier uses the `provider-id/model-id` form. Provider credentials are supplied through
 	environment variables or explicit provider configuration.
 </Callout>
 
