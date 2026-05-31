@@ -145,17 +145,17 @@ Terminal error frame emitted after an attached-agent SSE stream has started.
 function observe(subscriber: FlueEventSubscriber): () => void;
 ```
 
-Subscribes to live workflow-run and agent-interaction activity emitted in the current isolate. The returned function unsubscribes the listener. Subscribers run synchronously from the event emission path; keep them lightweight, do not mutate events, and queue asynchronous work with application-owned rejection handling instead of blocking.
+Subscribes to live workflow-run and agent-interaction activity emitted in the current isolate. The returned function unsubscribes the listener. Subscribers run synchronously from the event emission path with isolated JSON snapshots. Keep callbacks lightweight and queue substantial asynchronous work instead of blocking emission. Returned promises are observed for rejection but are not awaited.
 
 See [Observability](/docs/guide/observability/) for application setup and exporter guidance.
 
 #### `FlueEventSubscriber`
 
 ```ts
-type FlueEventSubscriber = (event: FlueEvent, ctx: FlueContext) => void;
+type FlueEventSubscriber = (event: FlueEvent, ctx: FlueContext) => void | Promise<void>;
 ```
 
-Receives the decorated event and its originating context. Synchronous subscriber failures are logged and do not halt event dispatch or the originating execution.
+Receives an isolated decorated event snapshot and its originating context. Subscriber failures are logged and do not halt event dispatch or the originating execution. If an event cannot be serialized as JSON, Flue logs the snapshot failure and skips global observer delivery for that event.
 
 ## Public errors
 

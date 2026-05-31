@@ -78,7 +78,7 @@ An operation is the useful finite boundary for agent activity, such as prompting
 
 When an operation is slow or unexpectedly expensive, its nested activity can provide the explanation. One prompt operation may include multiple model turns or tool calls. Model turns expose latency, token usage, and cost; tool activity shows where the agent spent time or encountered an error.
 
-Observers are invoked while Flue emits activity. Keep them lightweight: filter events, record metrics, or enqueue exporter work rather than performing blocking work in the callback. In a distributed deployment, each running application context observes the activity it handles; send telemetry to an external backend if it needs to be aggregated across instances.
+Callbacks registered with `observe(...)` are invoked while Flue emits activity and receive isolated JSON snapshots. Keep them lightweight: filter events, record metrics, or enqueue exporter work rather than performing blocking work in the callback. Returned promises are observed for rejection but are not awaited. In a distributed deployment, each running application context observes the activity it handles; send telemetry to an external backend if it needs to be aggregated across instances.
 
 ## Export telemetry safely
 
