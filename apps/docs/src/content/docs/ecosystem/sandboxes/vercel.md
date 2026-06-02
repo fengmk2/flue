@@ -37,4 +37,4 @@ const agent = createAgent(() => ({
 
 Keep Vercel authentication values in trusted application configuration and determine whether sandboxes should be fresh per job or reusable for stable agent identities.
 
-See [Sandboxes](/docs/guide/sandboxes/) and [Sandbox Connector API](https://github.com/withastro/flue/blob/main/docs/sandbox-connector-spec.md).
+See [Sandboxes](/docs/guide/sandboxes/) and [Sandbox Connector API](/docs/api/sandbox-api/).

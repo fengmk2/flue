@@ -1,7 +1,6 @@
 /docs /docs/getting-started/quickstart/ 302
 /docs/ /docs/getting-started/quickstart/ 302
 /docs/api/sandbox-api /docs/api/sandbox-api/ 302
-/docs/api/sandbox-api/ https://github.com/withastro/flue/blob/main/docs/sandbox-connector-spec.md 302
 /docs/api/harness-api /docs/api/agent-api/#harness 302
 /docs/api/harness-api/ /docs/api/agent-api/#harness 302
 /docs/sdk/create-flue-client /docs/sdk/overview/#createflueclient 302

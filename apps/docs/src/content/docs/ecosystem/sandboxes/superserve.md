@@ -15,8 +15,8 @@ Do not use the generated Superserve recipe with the current runtime without revi
 | Provider package     | `@superserve/sdk`                                                                                                                          |
 | Credential           | `SUPERSERVE_API_KEY`                                                                                                                       |
 | Intended environment | Provider-managed sandbox                                                                                                                   |
-| Required before use  | Reconcile the generated connector with [Sandbox Connector API](https://github.com/withastro/flue/blob/main/docs/sandbox-connector-spec.md) |
+| Required before use  | Reconcile the generated connector with [Sandbox Connector API](/docs/api/sandbox-api/) |
 
 Until that recipe is updated and type-checked against the current runtime, choose another available sandbox connector or implement a project-owned adapter against the public `SandboxApi` contract.
 
-See [Sandboxes](/docs/guide/sandboxes/) and [Sandbox Connector API](https://github.com/withastro/flue/blob/main/docs/sandbox-connector-spec.md).
+See [Sandboxes](/docs/guide/sandboxes/) and [Sandbox Connector API](/docs/api/sandbox-api/).

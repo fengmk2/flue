@@ -37,4 +37,4 @@ const agent = createAgent(() => ({
 
 Select templates, timeouts, network access, secret exposure, and resource reuse through your application and provider policy. Flue adapts the active environment; it does not choose provider retention for you.
 
-See [Sandboxes](/docs/guide/sandboxes/) and [Sandbox Connector API](https://github.com/withastro/flue/blob/main/docs/sandbox-connector-spec.md).
+See [Sandboxes](/docs/guide/sandboxes/) and [Sandbox Connector API](/docs/api/sandbox-api/).

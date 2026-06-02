@@ -47,13 +47,6 @@ export default {
 			return env.ASSETS.fetch(request);
 		}
 
-		if (url.pathname === '/docs/api/sandbox-api/index.md') {
-			return Response.redirect(
-				'https://raw.githubusercontent.com/withastro/flue/refs/heads/main/docs/sandbox-connector-spec.md',
-				302,
-			);
-		}
-
 		if (url.pathname === '/docs/api/harness-api/index.md') {
 			url.pathname = '/docs/api/agent-api/index.md';
 			return Response.redirect(url, 302);

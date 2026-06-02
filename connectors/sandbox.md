@@ -36,7 +36,7 @@ on where to go from there to collect the necessary information to complete your 
 Read these before writing code.
 
 - **Spec** (the `SandboxFactory` / `SandboxApi` contract):
-  `https://raw.githubusercontent.com/withastro/flue/refs/heads/main/docs/sandbox-connector-spec.md`
+  `https://flueframework.com/docs/api/sandbox-api/index.md`
 - **Worked example** (the Daytona connector — one example of a finished
   connector; your provider's shape may be quite different):
   `https://flueframework.com/cli/connectors/daytona.md`

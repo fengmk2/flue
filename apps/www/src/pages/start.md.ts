@@ -1,26 +1,17 @@
 import type { APIRoute } from 'astro';
-import { readdir, readFile } from 'node:fs/promises';
-import { join } from 'node:path';
 
-const docsDir = join(process.cwd(), '../../docs');
-const rawDocsUrl = 'https://raw.githubusercontent.com/withastro/flue/refs/heads/main/docs';
+const DEPLOY_GUIDES = [
+	['Deploy on Node.js', 'https://flueframework.com/docs/ecosystem/deploy/node/index.md'],
+	['Deploy on Cloudflare', 'https://flueframework.com/docs/ecosystem/deploy/cloudflare/index.md'],
+	[
+		'Deploy on GitHub Actions',
+		'https://flueframework.com/docs/ecosystem/deploy/github-actions/index.md',
+	],
+	['Deploy on GitLab CI/CD', 'https://flueframework.com/docs/ecosystem/deploy/gitlab-ci/index.md'],
+	['Deploy on Render', 'https://flueframework.com/docs/ecosystem/deploy/render/index.md'],
+] as const;
 
-async function getDeployGuideList() {
-	const files = (await readdir(docsDir))
-		.filter((file) => file.startsWith('deploy-') && file.endsWith('.md'))
-		.sort();
-
-	const guides = await Promise.all(
-		files.map(async (file) => {
-			const contents = await readFile(join(docsDir, file), 'utf-8');
-			const title = contents.match(/^#\s+(.+)$/m)?.[1] ?? file;
-
-			return `   - ${title}: ${rawDocsUrl}/${file}`;
-		}),
-	);
-
-	return guides.join('\n');
-}
+const DEPLOY_GUIDE_LIST = DEPLOY_GUIDES.map(([title, url]) => `   - ${title}: ${url}`).join('\n');
 
 const START_INSTRUCTIONS = `# Skill: Create a New Flue Agent
 
@@ -28,10 +19,10 @@ You are helping the user create their first Flue agent. Start with one agent mod
 
 ## Step 1: Gather Context
 
-First, fetch and read the Flue README and homepage:
+First, fetch and read the Flue homepage and quickstart:
 
-https://raw.githubusercontent.com/withastro/flue/refs/heads/main/README.md
 https://flueframework.com/
+https://flueframework.com/docs/getting-started/quickstart/index.md
 
 ## Step 2: Discover Requirements
 
@@ -45,15 +36,16 @@ Determine the following. Ask the user only for information you do not already kn
    - Do not create a workflow merely to test or talk to an agent. An agent can be used locally with \`flue connect\`.
 2. Where should the project live on disk?
    - Use filesystem tools to inspect the current working directory first, then confirm the target directory with the user.
-   - Flue supports two authored source layouts:
-     - Root layout: \`./agents/\` and \`./workflows/\`.
+   - Flue supports three authored source layouts:
      - \`.flue\` layout: \`./.flue/agents/\` and \`./.flue/workflows/\`.
-   - If \`<project-root>/.flue/\` already exists, use the \`.flue\` layout. Flue ignores root-level \`agents/\`, \`workflows/\`, and \`app.*\` for discovery in that case.
-   - If \`.flue/\` does not exist, prefer the root layout for a new or focused Flue project. When adding Flue to a larger existing application, recommend the \`.flue\` layout and confirm that choice with the user.
-   - Never mix the two layouts.
+     - \`src\` layout: \`./src/agents/\` and \`./src/workflows/\`.
+     - Root layout: \`./agents/\` and \`./workflows/\`.
+   - Flue selects the first existing source directory in this order: \`.flue/\`, \`src/\`, then the project root.
+   - Prefer the \`src\` layout for new projects. Use \`.flue\` when adding a self-contained Flue source area to a larger application. Preserve the root layout for an existing compact project.
+   - Never mix layouts. Flue discovers entrypoints from only the selected source directory.
 3. Where should it deploy? For example: Cloudflare Workers, Node.js, GitHub Actions, GitLab CI/CD, Vercel, Fly.io.
    - Available deploy guides:
-${await getDeployGuideList()}
+${DEPLOY_GUIDE_LIST}
    - If they choose a host without a deploy guide, use the Node.js guide as the baseline unless they ask for something else.
 4. Do they have an LLM provider/model in mind?
    - Optional, but recommended. Setup is easier if you know which provider they plan to use, because you can scaffold the right model specifier and environment variable names.
@@ -70,9 +62,9 @@ Before implementing, restate the chosen requirements to yourself as an implement
 - Agent purpose: \`<purpose>\`
 - Starter shape: \`agent only\` or \`agent + workflow\`
 - Project directory: \`<absolute or relative path>\`
-- Source layout: \`root\` or \`.flue\`
-- Agent module path: \`./agents/<name>.ts\` or \`./.flue/agents/<name>.ts\`
-- Workflow module path, if needed: \`none\`, \`./workflows/<name>.ts\`, or \`./.flue/workflows/<name>.ts\`
+- Source layout: \`.flue\`, \`src\`, or \`root\`
+- Agent module path: \`./.flue/agents/<name>.ts\`, \`./src/agents/<name>.ts\`, or \`./agents/<name>.ts\`
+- Workflow module path, if needed: \`none\` or the selected layout's \`workflows/<name>.ts\`
 - Deploy target: \`<target>\`
 - Model specifier: \`<exact model specifier>\`
 
@@ -82,7 +74,7 @@ Before implementing, restate the chosen requirements to yourself as an implement
    - Some deploy-guide starter examples may use a workflow. Treat those as deployment examples, not as a requirement to create a workflow. Preserve the selected starter shape.
 2. Create or update the project in the requested directory using the selected source layout.
 3. Always create one minimal **agent module** matching the user's idea, keeping it closer to "hello world" than a production app.
-   - Put it in the selected layout's immediate \`agents/\` directory, using a lower-kebab-case filename such as \`agents/hello-world.ts\`.
+   - Put it in the selected layout's immediate \`agents/\` directory, using a lower-kebab-case filename such as \`src/agents/hello-world.ts\`.
    - It must default-export \`createAgent(() => ({ model: '<exact model specifier>', instructions: '<short purpose-specific instruction>' }))\`.
    - Do not export \`route\` or \`websocket\` unless the user needs direct HTTP or WebSocket access. For a basic local starter, use \`flue connect <agent-name> local\` instead.
 4. If the selected shape is **agent + workflow**, create one minimal **workflow module** for the finite job.
@@ -100,7 +92,7 @@ Before implementing, restate the chosen requirements to yourself as an implement
          "strict": true,
          "skipLibCheck": true
        },
-       "include": ["agents/**/*.ts", "workflows/**/*.ts", ".flue/**/*.ts"],
+       "include": ["src/**/*.ts", "agents/**/*.ts", "workflows/**/*.ts", ".flue/**/*.ts"],
        "exclude": ["dist"]
      }
      \`\`\`
@@ -115,8 +107,8 @@ Before implementing, restate the chosen requirements to yourself as an implement
 Before finishing, verify that the implementation matches the user's explicit choices:
 
 - **Project location**: Files were created in the requested directory.
-- **Source layout**: Files use only the selected root or \`.flue\` layout; if \`.flue/\` exists, no new discovered entrypoints were placed at the root.
-- **Agent module**: One agent module exists in \`agents/<name>.ts\` or \`.flue/agents/<name>.ts\` and default-exports \`createAgent(...)\`.
+- **Source layout**: Files use only the selected \`.flue\`, \`src\`, or root layout; entrypoints were placed only in the selected source directory.
+- **Agent module**: One agent module exists in the selected layout's \`agents/<name>.ts\` and default-exports \`createAgent(...)\`.
 - **Workflow choice**: No workflow was added for an agent-only starter; for an agent + workflow starter, one workflow module initializes the created agent with \`init(agent)\`.
 - **Deploy target**: Config and commands match the user's selected deploy target.
 - **LLM provider/model**: Model specifier is one of the suggested values, or an exact value from \`https://flueframework.com/models.json\` if the user requested another model.

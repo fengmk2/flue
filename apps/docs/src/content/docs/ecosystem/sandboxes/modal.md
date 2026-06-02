@@ -25,4 +25,4 @@ pnpm exec flue add modal
 
 Use Modal when your application already manages Modal applications, images, or sandbox lifetimes and needs to expose that compute boundary to Flue operations. The connector adapts the created sandbox; creation, shutdown, secret handling, networking, and image content remain your responsibility.
 
-See [Sandboxes](/docs/guide/sandboxes/) and [Sandbox Connector API](https://github.com/withastro/flue/blob/main/docs/sandbox-connector-spec.md).
+See [Sandboxes](/docs/guide/sandboxes/) and [Sandbox Connector API](/docs/api/sandbox-api/).

@@ -1,10 +1,10 @@
 ---
 title: Daytona
 description: Connect a Flue agent to an application-owned Daytona sandbox.
-lastReviewedAt: 2026-05-30
+lastReviewedAt: 2026-06-01
 ---
 
-The Daytona connector adapts an already-initialized Daytona sandbox from `@daytona/sdk` into Flue's `SandboxFactory` interface. Use it when a Node-hosted application needs a provider-managed sandbox with filesystem and shell operations.
+The Daytona connector adapts an already-initialized Daytona sandbox from `@daytona/sdk` into Flue's sandbox interface. Use it when a Node-hosted application needs a provider-managed Linux environment with filesystem and shell operations.
 
 ## Add the connector
 
@@ -12,7 +12,7 @@ The Daytona connector adapts an already-initialized Daytona sandbox from `@dayto
 pnpm exec flue add daytona
 ```
 
-The repository includes a runnable integration shape in `examples/hello-world/.flue/connectors/daytona.ts`.
+The generated connector expects your application to create and own the Daytona sandbox. It does not decide sandbox identity, retention, or cleanup for you.
 
 ## Requirements
 
@@ -20,6 +20,7 @@ The repository includes a runnable integration shape in `examples/hello-world/.f
 | ------------------- | ------------------------------------------------------------------------------ |
 | Provider package    | `@daytona/sdk`                                                                 |
 | Credential          | `DAYTONA_API_KEY`                                                              |
+| Optional settings   | `DAYTONA_API_URL`, `DAYTONA_TARGET`                                            |
 | Integration shape   | Your code creates a Daytona sandbox, then passes it through `daytona(sandbox)` |
 | Lifecycle ownership | Your application owns creation, retention, and deletion                        |
 
@@ -35,10 +36,9 @@ const sandbox = await client.create();
 const agent = createAgent(() => ({
   model: 'anthropic/claude-sonnet-4-6',
   sandbox: daytona(sandbox),
-  cwd: '/workspace',
 }));
 ```
 
-Delete an ephemeral sandbox in application code after bounded work completes. If a continuing agent instance should reuse a remote workspace, map instance identity to sandbox identity and implement retention and cleanup deliberately.
+Configure images, snapshots, regions, environment variables, and volumes through the Daytona SDK before passing the sandbox to `daytona(...)`. For a narrower working directory, configure `cwd` on the created agent; Flue resolves it once against the connector's provider-owned base directory during `init()`.
 
-See [Sandboxes](/docs/guide/sandboxes/#remote-sandboxes) and [Sandbox Connector API](https://github.com/withastro/flue/blob/main/docs/sandbox-connector-spec.md).
+See [Sandboxes](/docs/guide/sandboxes/#remote-sandboxes), [Sandbox Connector API](/docs/api/sandbox-api/), and [Daytona's TypeScript SDK reference](https://www.daytona.io/docs/en/typescript-sdk/daytona/).

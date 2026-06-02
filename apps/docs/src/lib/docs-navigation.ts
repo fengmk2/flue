@@ -41,6 +41,7 @@ export const docsSections: DocsSection[] = [
 					{ title: 'Project Layout', slug: 'guide/project-layout' },
 					{ title: 'Models & Providers', slug: 'guide/models' },
 					{ title: 'Agents', slug: 'guide/building-agents' },
+					{ title: 'Message-Driven Agents', slug: 'guide/message-driven-agents' },
 					{ title: 'Workflows', slug: 'guide/workflows' },
 					{ title: 'Skills', slug: 'guide/skills' },
 					{ title: 'Tools', slug: 'guide/tools' },
@@ -73,10 +74,7 @@ export const docsSections: DocsSection[] = [
 			{
 				title: 'Advanced',
 				items: [
-					{
-						title: 'Sandbox Connector API',
-						href: 'https://github.com/withastro/flue/blob/main/docs/sandbox-connector-spec.md',
-					},
+					{ title: 'Sandbox Connector API', slug: 'api/sandbox-api' },
 					{ title: 'Data Persistence API', slug: 'api/data-persistence-api' },
 				],
 			},
