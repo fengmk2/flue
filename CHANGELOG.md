@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.9.1 - 2026-06-02
+
 ### Fixes & Other Changes
 
 - **Fixed relative cwd double-scoping in custom sandbox connectors.** Flue now applies a created agent's `cwd` exactly once during `init()`, relative to the connector's provider-owned base directory. `SandboxFactory.createSessionEnv()` now receives only `{ id }`; connector implementations should stop consuming `cwd` there.
