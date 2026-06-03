@@ -26,7 +26,7 @@ npm install @flue/runtime valibot agents
 npm install -D @flue/cli wrangler
 ```
 
-`agents` is Cloudflare's Agents SDK — Flue uses it to route HTTP requests to a per-agent Durable Object. If you also need a remote sandbox, additionally install `@cloudflare/sandbox` (see [Connecting a remote sandbox](#connecting-a-remote-sandbox) below).
+`agents` is Cloudflare's Agents SDK — Flue uses its Durable Object base class and native lifecycle capabilities while retaining ownership of application routing. If you also need a remote sandbox, additionally install `@cloudflare/sandbox` (see [Connecting a remote sandbox](#connecting-a-remote-sandbox) below).
 
 ### 2. Create your first agent
 
@@ -76,13 +76,13 @@ Cloudflare requires an explicit migration whenever a Worker adds a Durable Objec
   "name": "my-flue-worker",
   "compatibility_date": "2026-04-01",
   "compatibility_flags": ["nodejs_compat"],
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["FlueRegistry", "TranslateWorkflow"] }],
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["FlueRegistry", "FlueTranslateWorkflow"] }],
 }
 ```
 
-Every Cloudflare target includes `FlueRegistry`. Workflow classes use the PascalCase filename plus `Workflow`, so `.flue/workflows/translate.ts` becomes `TranslateWorkflow`. Agent classes use the PascalCase filename directly, so `.flue/agents/support-chat.ts` becomes `SupportChat`.
+Every Cloudflare target includes `FlueRegistry`. Flue-owned bindings use upper snake case and generated classes use PascalCase: `.flue/workflows/translate.ts` binds `FLUE_TRANSLATE_WORKFLOW` to `FlueTranslateWorkflow`, while `.flue/agents/support-chat.ts` binds `FLUE_SUPPORT_CHAT_AGENT` to `FlueSupportChatAgent`.
 
-Keep deployed migration entries in order. When you add an agent or workflow later, append a uniquely tagged migration for its new class. Use Cloudflare's explicit rename or delete migrations when changing a deployed class lifecycle.
+Keep deployed migration entries in order. When you add an agent or workflow later, append a uniquely tagged migration for its new class. Use Cloudflare's explicit rename or delete migrations when changing a deployed class lifecycle. When upgrading a deployment created before this naming scheme, append `renamed_classes` entries such as `{ "from": "SupportChat", "to": "FlueSupportChatAgent" }` and `{ "from": "TranslateWorkflow", "to": "FlueTranslateWorkflow" }`; do not rewrite deployed migration history.
 
 ### 4. Build and deploy
 
@@ -176,7 +176,7 @@ export const cloudflare = extend({
 });
 ```
 
-This is an advanced Cloudflare-only extension point. Flue applies `base` first, then defines its own Durable Object subclass while preserving the filename-derived binding and migration name. Use `base` for native SDK lifecycle hooks and additional named methods. Do not override `fetch()`, `onRequest()`, WebSocket hooks, `onFiberRecovered()`, or `alarm()`: Flue and the Agents SDK use those methods for routing, hibernating connections, interruption recovery, and alarm multiplexing.
+This is an advanced Cloudflare-only extension point. Flue applies `base` first, then defines its own Durable Object subclass with the generated Flue binding and class identity. For `.flue/agents/support-chat.ts`, authored Worker code can access the namespace as `env.FLUE_SUPPORT_CHAT_AGENT`, and Wrangler binds that name to `FlueSupportChatAgent`. Use `base` for native SDK lifecycle hooks and additional named methods. Do not override `fetch()`, `onRequest()`, WebSocket hooks, `onFiberRecovered()`, or `alarm()`: Flue and the Agents SDK use those methods for routing, hibernating connections, interruption recovery, and alarm multiplexing.
 
 Use `wrap` when an integration needs to wrap the final Flue-generated Durable Object class:
 
@@ -358,7 +358,7 @@ export { Sandbox } from '@cloudflare/sandbox';
     "bindings": [{ "class_name": "Sandbox", "name": "Sandbox" }],
   },
   "migrations": [
-    { "tag": "v1", "new_sqlite_classes": ["FlueRegistry", "Assistant"] },
+    { "tag": "v1", "new_sqlite_classes": ["FlueRegistry", "FlueAssistantAgent"] },
     { "tag": "v2", "new_sqlite_classes": ["Sandbox"] },
   ],
   "containers": [{ "class_name": "Sandbox", "image": "./Dockerfile" }],
@@ -406,7 +406,7 @@ export { Sandbox as NodeSandbox } from '@cloudflare/sandbox';
     ],
   },
   "migrations": [
-    { "tag": "v1", "new_sqlite_classes": ["FlueRegistry", "Assistant"] },
+    { "tag": "v1", "new_sqlite_classes": ["FlueRegistry", "FlueAssistantAgent"] },
     { "tag": "v2", "new_sqlite_classes": ["PyBoxSandbox", "NodeSandbox"] },
   ],
   "containers": [

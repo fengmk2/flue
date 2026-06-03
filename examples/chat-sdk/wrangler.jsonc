@@ -11,6 +11,10 @@
 		{
 			"tag": "flue-class-FlueRegistry",
 			"new_sqlite_classes": ["FlueRegistry"]
+		},
+		{
+			"tag": "flue-rename-generated-classes",
+			"renamed_classes": [{ "from": "Assistant", "to": "FlueAssistantAgent" }]
 		}
 	]
 }

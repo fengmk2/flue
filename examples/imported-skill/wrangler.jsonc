@@ -15,6 +15,13 @@
 		{
 			"tag": "flue-class-WithImportedSkillWorkflow",
 			"new_sqlite_classes": ["WithImportedSkillWorkflow"]
+		},
+		{
+			"tag": "flue-rename-generated-classes",
+			"renamed_classes": [
+				{ "from": "WithCustomBashWorkflow", "to": "FlueWithCustomBashWorkflow" },
+				{ "from": "WithImportedSkillWorkflow", "to": "FlueWithImportedSkillWorkflow" }
+			]
 		}
 	]
 }

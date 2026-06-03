@@ -22,6 +22,14 @@
 		{
 			"tag": "flue-class-WithCloudflareBinding",
 			"new_sqlite_classes": ["WithCloudflareBinding"]
+		},
+		{
+			"tag": "flue-rename-generated-classes",
+			"renamed_classes": [
+				{ "from": "SkillsFromGitWorkflow", "to": "FlueSkillsFromGitWorkflow" },
+				{ "from": "SkillsFromR2Workflow", "to": "FlueSkillsFromR2Workflow" },
+				{ "from": "WithCloudflareBinding", "to": "FlueWithCloudflareBindingAgent" }
+			]
 		}
 	],
 	"ai": {

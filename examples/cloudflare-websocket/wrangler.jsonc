@@ -15,6 +15,13 @@
 		{
 			"tag": "flue-class-LiveSmokeWorkflow",
 			"new_sqlite_classes": ["LiveSmokeWorkflow"]
+		},
+		{
+			"tag": "flue-rename-generated-classes",
+			"renamed_classes": [
+				{ "from": "Chat", "to": "FlueChatAgent" },
+				{ "from": "LiveSmokeWorkflow", "to": "FlueLiveSmokeWorkflow" }
+			]
 		}
 	],
 	"ai": {

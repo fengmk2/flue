@@ -53,7 +53,7 @@ const app = new Hono();
 app.get('/api/ping', (c) => c.json({ pong: true, at: new Date().toISOString() }));
 
 // Flue's built-in agent route: `POST /agents/:name/:id`. Forwards into
-// the appropriate per-agent DO via routeAgentRequest().
+// the appropriate generated per-agent Durable Object binding.
 app.route('/', flue());
 
 // To expose admin endpoints, import `admin` from `@flue/runtime/routing`, then

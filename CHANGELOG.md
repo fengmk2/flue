@@ -7,6 +7,7 @@
 - **OpenTelemetry: Replace `captureContent` with explicit sanitization.** `createOpenTelemetryObserver(...)` now exports metadata and generic failure messages by default. To export content, replace `captureContent: true` with an application-owned `sanitize(event)` callback that returns a sanitized event, or intentionally return the original event for unsanitized local debugging.
 - **Agents: Rename ordinary sessions beginning with `task:`.** Session names with that prefix are now reserved for framework-owned delegated-task history. Flue retains detached child history until parent deletion or application-owned retention cleanup, and no stored records are deleted automatically during upgrade.
 - **Agents: Clear or migrate persisted beta session state before upgrading.** Session records now persist one opaque `aff_<ULID>` provider-affinity key instead of deriving affinity from agent instance, harness, and session names. This keeps prompt-cache and routing-affinity identifiers bounded and distinct for nested tasks. Existing version-4 beta session records are rejected; storage keys are unchanged.
+- **Cloudflare: Rename generated Durable Object identities.** Generated bindings now use `FLUE_<NAME>_AGENT`, `FLUE_<NAME>_WORKFLOW`, and `FLUE_REGISTRY`; generated classes use `Flue<Name>Agent`, `Flue<Name>Workflow`, and `FlueRegistry`. Existing deployments must append authored Wrangler `renamed_classes` migrations for deployed agent and workflow classes and update authored direct binding access such as `env.Assistant` to `env.FLUE_ASSISTANT_AGENT`.
 
 ### Fixes & Other Changes
 
@@ -16,6 +17,7 @@
 - **CLI: Report unsupported Bun runtimes accurately.** When Bun's reported Node.js compatibility level is below Flue's required floor, the CLI now asks users to upgrade Bun instead of Node.js.
 - **Cloudflare: Preserve workflow-run history parity.** Cloudflare workflow storage now ignores events for unknown runs, resets same-ID event history when a run is initialized, preserves absent optional fields separately from explicit `null`, and retains explicit terminal `null` results during recovery.
 - **Harden persisted workflow-event identity.** Workflow history now treats `(runId, eventIndex)` as one immutable append-only event identity and SSE resume cursor across Node and Cloudflare. Malformed or duplicate persisted events fail instead of producing ambiguous history, and pre-event stream failures no longer fabricate cursor `0`.
+- **Cloudflare: Own Durable Object routing and replay-safe retries.** Flue now resolves generated agent, workflow, and registry bindings explicitly instead of deriving public routes from the Agents SDK environment scanner. Retryable, non-overloaded Durable Object infrastructure failures retry only where replay is safe: dispatch admission, run-record and run-events reads, and registry traffic. Prompts, workflow admissions, streams, and WebSocket upgrades remain single-attempt.
 
 ## 0.9.1 - 2026-06-02
 
