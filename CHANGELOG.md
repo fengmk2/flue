@@ -20,6 +20,12 @@
 - **Harden persisted workflow-event identity.** Workflow history now treats `(runId, eventIndex)` as one immutable append-only event identity and SSE resume cursor across Node and Cloudflare. Malformed or duplicate persisted events fail instead of producing ambiguous history, and pre-event stream failures no longer fabricate cursor `0`.
 - **Cloudflare: Own Durable Object routing.** Flue now resolves generated agent and workflow bindings explicitly instead of deriving public routes from the Agents SDK environment scanner, then forwards requests through the Agents SDK custom-routing helper. Public routes remain independent from generated Durable Object identities.
 
+## 0.9.2 - 2026-06-03
+
+### Fixes & Other Changes
+
+- Fixed agents' ability to activate skills autonomously with the `activate_skill` tool.
+
 ## 0.9.1 - 2026-06-02
 
 ### Fixes & Other Changes
