@@ -68,6 +68,28 @@ Cloudflare requires an ordered migration history that accounts for every Durable
 
 Never rewrite or reorder deployed migration entries. Generated agent classes require Durable Object SQLite, so introduce them through `new_sqlite_classes`, not legacy `new_classes`. Use Cloudflare's `renamed_classes` and `deleted_classes` migration fields when changing deployed class names or removing classes.
 
+For example, if you remove an agent or workflow that was previously deployed, append a `deleted_classes` migration so Cloudflare knows the class is no longer exported. Without this entry, Wrangler will fail because the migration history references a class that the Worker no longer provides:
+
+```jsonc
+{
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["FlueRegistry", "FlueSupportChatAgent", "FlueTranslateWorkflow"] },
+    { "tag": "v2", "deleted_classes": ["FlueSupportChatAgent"] }
+  ]
+}
+```
+
+Similarly, use `renamed_classes` when a deployed class changes its name, such as when renaming an agent module file:
+
+```jsonc
+{
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["FlueRegistry", "FlueSupportChatAgent"] },
+    { "tag": "v2", "renamed_classes": [{ "from": "FlueSupportChatAgent", "to": "FlueSupportAssistantAgent" }] }
+  ]
+}
+```
+
 ## Durable agent execution
 
 Cloudflare agents durably admit direct HTTP, SSE, and WebSocket prompts together with `dispatch(...)` inputs. All accepted input for one session enters the same per-session queue, while separate sessions can progress independently.
