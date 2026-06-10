@@ -82,10 +82,8 @@ jobs:
     permissions:
       issues: read
     steps:
-      # actions/checkout v6.0.3
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
-      # actions/setup-node v6.4.0
-      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 22
       - run: npm ci
@@ -255,10 +253,8 @@ jobs:
       contents: read
       issues: write
     steps:
-      # actions/checkout v6.0.3
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
-      # actions/setup-node v6.4.0
-      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 22
       - run: npm ci

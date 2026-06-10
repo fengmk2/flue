@@ -18,7 +18,7 @@ workflows use the project-owned `src/connectors/cloudflare-shell.ts` implementat
 Install deps:
 
 ```bash
-vp install
+pnpm install
 ```
 
 Build the runtime + cli once (the local workspace `dist/` directories are
@@ -26,7 +26,7 @@ what `flue dev`/`run` consume; a fresh checkout has stale ones — see L1
 in the cf-shell adoption plan):
 
 ```bash
-vp run @flue/runtime#build @flue/cli#build
+pnpm run build -F @flue/runtime -F @flue/cli
 ```
 
 The agents in this example use the Workers AI binding, so no provider API

@@ -36,14 +36,14 @@ Agent and workflow sources use either `<root>/.flue/` or `<root>/`; when `.flue/
 Build runtime before CLI or examples:
 
 ```
-vp run build            # in packages/runtime/
-vp run build            # in packages/cli/
+pnpm run build          # in packages/runtime/
+pnpm run build          # in packages/cli/
 ```
 
 Type-check runtime changes with:
 
 ```
-vp run check:types      # in packages/runtime/
+pnpm run check:types    # in packages/runtime/
 ```
 
 When using `task` to delegate to subagents, you MUST include a notice that the subagent must not spawn its own subagents.
