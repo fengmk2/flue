@@ -124,6 +124,10 @@ In your final response, include a short checklist with the project directory, so
 - Important: Never invent API keys or secrets.
   - Instead: You can scaffold out obvious placeholders, but always ask the user to provide the API secrets/keys/tokens themselves. You can still help the user by showing them the command to run to set the secret, based on their local dev setup and chosen host.
 - Important: A direct prompt to an agent or a dispatched agent input is not a workflow run. Use workflow terminology only for an invocation of a workflow module.
+- Important: Once \`@flue/cli\` is installed in the project, the full Flue documentation is available offline through the CLI and always matches the installed version. Prefer it over fetching website URLs for follow-up questions:
+  - \`npx flue docs search <query>\` — search the documentation (JSON results)
+  - \`npx flue docs read <path>\` — print one documentation page as Markdown
+  - \`npx flue docs\` — list all documentation pages
 - Important: For local development, prefer \`flue dev --target node\` or \`flue dev --target cloudflare\`. The dev server defaults to port 3583, watches for file changes, and rebuilds + reloads on edits.
   - Instead of: combining \`flue build\` with \`wrangler dev\` (the previous workflow). \`flue dev --target cloudflare\` covers that case directly and stays in sync with what \`wrangler deploy\` will bundle.
 - Important: \`flue run --target cloudflare\` is not supported.

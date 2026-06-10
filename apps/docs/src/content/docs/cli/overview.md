@@ -24,6 +24,7 @@ The CLI requires Node.js `>=22.18.0`. Cloudflare development and deployment also
 | [`flue build`](/docs/cli/build/)     | Create deployable application artifacts.                    |
 | [`flue logs`](/docs/cli/logs/)       | Replay or follow workflow-run events from a running server. |
 | [`flue add`](/docs/cli/add/)         | Fetch connector installation recipes for a coding agent.    |
+| [`flue docs`](/docs/cli/docs/)       | List, read, and search the bundled Flue documentation.      |
 
 ## Common application options
 
