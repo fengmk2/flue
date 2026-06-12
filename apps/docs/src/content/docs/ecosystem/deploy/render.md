@@ -59,7 +59,7 @@ The translation itself can vary by model. The shape is what matters.
 Try a short conversation with the `assistant` agent:
 
 ```bash
-curl https://<service>.onrender.com/agents/assistant/session-1 \
+curl 'https://<service>.onrender.com/agents/assistant/session-1?wait=result' \
   -H "Content-Type: application/json" \
   -d '{"message": "What is the capital of Japan?"}'
 ```
@@ -67,14 +67,14 @@ curl https://<service>.onrender.com/agents/assistant/session-1 \
 Then send a follow-up using the same session ID:
 
 ```bash
-curl https://<service>.onrender.com/agents/assistant/session-1 \
+curl 'https://<service>.onrender.com/agents/assistant/session-1?wait=result' \
   -H "Content-Type: application/json" \
   -d '{"message": "How many people live there?"}'
 ```
 
-Reusing the ID keeps Flue's session scope stable. On Node.js, that session state lives in memory unless you wire up a custom store. These HTTP prompts remain attached until they complete; they advance an agent session and do not create workflow runs or return `runId`.
+Reusing the ID keeps Flue's session scope stable. On Node.js, that session state lives in memory unless you add a `db.ts` persistence adapter. As with workflows, `?wait=result` keeps the request attached until the prompt completes and returns `{ result, streamUrl, offset }`; without it, the route returns a `202` admission response with stream coordinates instead of the reply. Either way these prompts advance an agent session — they do not create workflow runs or return `runId`.
 
-Render closes idle HTTP connections after about 100 seconds. Most prompt-and-response agents finish well inside that window, but if you build agents that run long tool chains or large multi-step prompts, use `POST /agents/:name/:id` without `?wait=result` and read the returned stream coordinates, or use a scheduled / background runner (see [Going further](#going-further)) instead of a single blocking request.
+Render closes idle HTTP connections after about 100 seconds. Most prompt-and-response agents finish well inside that window, but if you build agents that run long tool chains or large multi-step prompts, drop `?wait=result` from these examples and read the returned stream coordinates instead, or use a scheduled / background runner (see [Going further](#going-further)) rather than a single blocking request.
 
 If you only need direct attached agent prompts or application webhook routes that dispatch inputs into in-memory sessions, you can stop here.
 
@@ -174,7 +174,7 @@ Create a `db.ts` that reads `DATABASE_URL`:
 ```typescript title=".flue/db.ts"
 import { postgres } from '@flue/postgres';
 
-export default postgres(process.env.DATABASE_URL);
+export default postgres(process.env.DATABASE_URL!);
 ```
 
 Flue discovers `db.ts` at build time and wires it into the generated server entry. The adapter handles schema creation, session snapshots, and durable submission state automatically.
@@ -183,11 +183,11 @@ The `connectionString` from `fromDatabase` is Render's internal Postgres URL, wh
 
 To verify persistence end to end, run a fact-recall test that survives a process restart:
 
-1. Commit the updated `render.yaml` and the new `SessionStore`, then wait for the database-aware deploy to go live.
+1. Commit the updated `render.yaml` and the new `db.ts`, then wait for the database-aware deploy to go live.
 2. Plant a fact in a fresh session:
 
    ```bash
-   curl https://<service>.onrender.com/agents/assistant/persist-test \
+   curl 'https://<service>.onrender.com/agents/assistant/persist-test?wait=result' \
      -H "Content-Type: application/json" \
      -d '{"message": "Remember this number for me: 42."}'
    ```
@@ -196,12 +196,12 @@ To verify persistence end to end, run a fact-recall test that survives a process
 4. Once the service is healthy, ask for the fact back:
 
    ```bash
-   curl https://<service>.onrender.com/agents/assistant/persist-test \
+   curl 'https://<service>.onrender.com/agents/assistant/persist-test?wait=result' \
      -H "Content-Type: application/json" \
      -d '{"message": "What number did I ask you to remember?"}'
    ```
 
-If the response references `42`, your `SessionStore` is reading and writing through Postgres correctly. If the agent has no idea, persistence isn't being read on session resume.
+If the response references `42`, your persistence adapter is reading and writing through Postgres correctly. If the agent has no idea, persistence isn't being read on session resume.
 
 ## Going further
 
@@ -221,4 +221,4 @@ When a step doesn't behave as expected, run through these quick checks:
 | Health check fails                   | Make sure `startCommand` is `node dist/server.mjs` and that the build produced `dist/server.mjs`. |
 | Agent call returns a provider error  | Confirm the matching provider key is set in the service's environment variables.                  |
 | Build can't find `flue`              | Make sure `@flue/cli` is installed and available during the build or start command.               |
-| Agent forgets context after a deploy | Wire up a custom `SessionStore` backed by Postgres or Key Value.                                  |
+| Agent forgets context after a deploy | Add a `db.ts` persistence adapter backed by Postgres (see [Database](/docs/guide/database/)).     |

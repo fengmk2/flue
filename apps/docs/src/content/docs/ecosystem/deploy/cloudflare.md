@@ -26,7 +26,7 @@ npm install @flue/runtime valibot 'agents@^0.14.1'
 npm install -D @flue/cli wrangler
 ```
 
-`agents` is Cloudflare's Agents SDK — Flue uses its Durable Object base class and native lifecycle capabilities while retaining ownership of application routing. Cloudflare builds currently require the audited `agents >=0.14.1 <0.15.0` range. If you also need a remote sandbox, additionally install `@cloudflare/sandbox` (see [Connecting a remote sandbox](#connecting-a-remote-sandbox) below).
+`agents` is Cloudflare's Agents SDK — Flue uses its Durable Object base class and native lifecycle capabilities while retaining ownership of application routing. Flue is tested against `agents` 0.14.x; the generated worker checks at runtime that the installed SDK provides the durability API it relies on (such as `runFiber`) and fails with an explicit error if it does not. If you also need a remote sandbox, additionally install `@cloudflare/sandbox` (see [Connecting a remote sandbox](#connecting-a-remote-sandbox) below).
 
 ### 2. Create your first agent
 
@@ -532,7 +532,7 @@ curl https://my-support-agent.<your-subdomain>.workers.dev/workflows/translate?w
   -d '{"text": "Hello world", "language": "French"}'
 ```
 
-Stream events from a deployed agent with `GET https://my-support-agent.<your-subdomain>.workers.dev/agents/chat/customer-123?live=sse`.
+Stream events from a deployed agent with `GET https://my-support-agent.<your-subdomain>.workers.dev/agents/chat/customer-123?offset=-1&live=sse`. Live reads require an `offset` — use `-1` to replay from the start, or `now` for future events only (see the [Streaming Protocol](/docs/api/streaming-protocol/)).
 
 ### Choosing a sandbox strategy
 
