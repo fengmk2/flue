@@ -85,13 +85,17 @@ class DaytonaSandboxApi implements SandboxApi {
 
 	async exec(
 		command: string,
-		options?: { cwd?: string; env?: Record<string, string>; timeout?: number },
+		options?: { cwd?: string; env?: Record<string, string>; timeoutMs?: number },
 	): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+		// Daytona's executeCommand timeout is in seconds. Round up so the
+		// provider deadline is never shorter than the requested one.
+		const timeoutSeconds =
+			options?.timeoutMs === undefined ? undefined : Math.ceil(options.timeoutMs / 1000);
 		const response = await this.sandbox.process.executeCommand(
 			command,
 			options?.cwd,
 			options?.env,
-			options?.timeout,
+			timeoutSeconds,
 		);
 		return {
 			stdout: response.result ?? '',

@@ -69,14 +69,14 @@ export interface SandboxApi {
     options?: {
       cwd?: string;
       env?: Record<string, string>;
-      timeout?: number;
+      timeoutMs?: number;
       signal?: AbortSignal;
     },
   ): Promise<{ stdout: string; stderr: string; exitCode: number }>;
 }
 ```
 
-`timeout` is the primary cancellation contract. Every connector should honor it by forwarding to the provider SDK's native timeout option. `signal` is optional: connectors whose provider SDK supports mid-flight cancellation should forward it; others may ignore it.
+`timeoutMs` is the primary cancellation contract. Every connector should honor it by forwarding to the provider SDK's native timeout option. `signal` is optional: connectors whose provider SDK supports mid-flight cancellation should forward it; others may ignore it.
 
 ### `SandboxFactory`
 
@@ -154,9 +154,11 @@ Delete a file or directory. Honor `options.recursive` and `options.force`.
 
 ### `exec(command, options?)`
 
-Run a shell command. Honor `options.cwd`, `options.env`, and `options.timeout`. The `timeout` hint is measured in seconds. If the provider SDK does not expose a native timeout option, translate it into `AbortSignal.timeout(options.timeout * 1000)` and pass that signal to an SDK that accepts one, or as a last resort race the call against a timer and reject. Make a best-effort attempt to honor `timeout`: it is how the model-facing bash tool stops a command and retries. Returning an exit-code-124 result with timeout details in `stderr` matches the convention used by other connectors and `timeout(1)`.
+Run a shell command. Honor `options.cwd`, `options.env`, and `options.timeoutMs`. The `timeoutMs` hint is measured in milliseconds. Forward it to the provider SDK's native timeout option, converting units when the provider uses something other than milliseconds. Implementations MAY round `timeoutMs` UP to their coarsest supported granularity, never down: a provider that only accepts whole seconds should use `Math.ceil(options.timeoutMs / 1000)` so the enforced deadline is never shorter than the requested one. If the provider SDK does not expose a native timeout option, translate the hint into `AbortSignal.timeout(options.timeoutMs)` and pass that signal to an SDK that accepts one, or as a last resort race the call against a timer and reject. Make a best-effort attempt to honor `timeoutMs`: it is how the model-facing bash tool stops a command and retries. Returning an exit-code-124 result with timeout details in `stderr` matches the convention used by other connectors and `timeout(1)`.
 
 If the provider SDK also supports an `AbortSignal`, forward `options.signal` for true mid-flight cancellation. If it cannot observe a signal, ignore that option. The `createSandboxSessionEnv` wrapper performs pre- and post-operation `signal.aborted` checks. Do not fake mid-flight signal cancellation with `Promise.race`: the underlying remote process would keep running.
+
+The Daytona connector demonstrates the rounding rule: Daytona's `executeCommand` accepts whole seconds, so it forwards `Math.ceil(options.timeoutMs / 1000)`.
 
 If the provider does not separately expose `stderr`, return `''`. Default `exitCode` to `0` only when the call clearly succeeded.
 

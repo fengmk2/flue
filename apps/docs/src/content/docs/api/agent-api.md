@@ -499,11 +499,12 @@ Runs a shell command and records its command exchange in conversation state.
 
 #### `ShellOptions`
 
-| Field    | Type                     | Description                                    |
-| -------- | ------------------------ | ---------------------------------------------- |
-| `env`    | `Record<string, string>` | Environment variables supplied to the command. |
-| `cwd`    | `string`                 | Working directory supplied to the command.     |
-| `signal` | `AbortSignal`            | Cancel this operation.                         |
+| Field       | Type                     | Description                                                                          |
+| ----------- | ------------------------ | ------------------------------------------------------------------------------------ |
+| `env`       | `Record<string, string>` | Environment variables supplied to the command.                                        |
+| `cwd`       | `string`                 | Working directory supplied to the command.                                            |
+| `timeoutMs` | `number`                 | Wall-clock deadline in milliseconds, forwarded to the sandbox connector's native timeout. |
+| `signal`    | `AbortSignal`            | Cancel this operation.                                                                |
 
 #### `ShellResult`
 
