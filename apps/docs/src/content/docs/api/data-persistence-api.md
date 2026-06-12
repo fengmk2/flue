@@ -13,7 +13,6 @@ import type {
   EventStreamReadResult,
   EventStreamStore,
   PersistenceAdapter,
-  RunRegistry,
   RunStore,
   SessionData,
   SessionStore,
@@ -31,20 +30,18 @@ Always typecheck a custom adapter against the real types from `@flue/runtime/ada
 interface PersistenceAdapter {
   connect(): AgentExecutionStore;
   connectRunStore(): RunStore;
-  connectRunRegistry(): RunRegistry;
   connectEventStreamStore(): EventStreamStore;
   migrate?(): void | Promise<void>;
   close?(): void | Promise<void>;
 }
 ```
 
-A persistence adapter provides the database-backed stores used by a generated Node server. Flue calls `migrate()` once at startup when present, then calls `connect()`, `connectRunStore()`, `connectRunRegistry()`, and `connectEventStreamStore()`. On shutdown, Flue calls `close()` when present. Adapters that create schema implicitly may omit `migrate()`, but must still uphold the schema-versioning obligation below in their store-creating paths.
+A persistence adapter provides the database-backed stores used by a generated Node server. Flue calls `migrate()` once at startup when present, then calls `connect()`, `connectRunStore()`, and `connectEventStreamStore()`. On shutdown, Flue calls `close()` when present. Adapters that create schema implicitly may omit `migrate()`, but must still uphold the schema-versioning obligation below in their store-creating paths.
 
 | Method | Contract |
 | --- | --- |
 | `connect()` | Return agent session and submission storage. |
-| `connectRunStore()` | Return workflow-run records and metadata. |
-| `connectRunRegistry()` | Return workflow-run indexing and listing storage. |
+| `connectRunStore()` | Return workflow-run records, lookup, and listing storage. |
 | `connectEventStreamStore()` | Return durable event-stream storage for agent and workflow events. |
 | `migrate?()` | Bring the store to the current schema/format version before connecting. |
 | `close?()` | Release connections, pools, or file handles during shutdown. |
@@ -138,10 +135,22 @@ interface RunStore {
   createRun(input: CreateRunInput): Promise<void>;
   endRun(input: EndRunInput): Promise<void>;
   getRun(runId: string): Promise<RunRecord | null>;
+  lookupRun(runId: string): Promise<RunPointer | null>;
+  listRuns(opts?: ListRunsOpts): Promise<ListRunsResponse>;
 }
 ```
 
-The run store persists workflow-run records and metadata only. Event payloads live in `EventStreamStore`. Agent prompts and dispatched agent input do not create workflow runs.
+The run store persists workflow-run records and serves run lookup and listing for `/runs`, `flue logs`, and administrative routes. Event payloads live in `EventStreamStore`. Agent prompts and dispatched agent input do not create workflow runs.
+
+| Method | Contract |
+| --- | --- |
+| `createRun()` | Persist a new `active` run record. Idempotent, first-writer-wins: when a record with the same `runId` already exists, the call is a no-op and the existing record — including any terminal status, result, or error — is preserved (`INSERT OR IGNORE` / `ON CONFLICT DO NOTHING`). |
+| `endRun()` | Finalize a run record with its terminal status, result, or error. A no-op when no record exists for `runId`. |
+| `getRun()` | Return the full run record, or `null` when unknown. |
+| `lookupRun()` | Return the `RunPointer` projection of `getRun()` — every record field except `payload`, `result`, and `error` — or `null` when unknown. |
+| `listRuns()` | List run pointers newest first (`startedAt` descending, then `runId` descending), filtered by `status`/`workflowName` and paginated via the opaque `nextCursor`. |
+
+Single-database adapters back all five methods from one run-records table; pointers are a column-subset select. Verify a custom implementation with `defineRunStoreContractTests` from `@flue/runtime/test-utils`.
 
 ## `EventStreamStore`
 
@@ -161,19 +170,6 @@ interface EventStreamStore {
 ```
 
 `EventStreamStore` owns append-only event streams for agent instances and workflow runs. A path is typically `agents/<name>/<id>` or `runs/<runId>`. `appendEvent()` returns the new Durable Streams offset. `readEvents()` reads events strictly after `offset`; `"-1"` starts at the beginning and `"now"` starts at the current tail. `subscribe()` registers an in-process listener for appends or closure on that store instance; it is not a cross-process notification contract.
-
-## `RunRegistry`
-
-```ts
-interface RunRegistry {
-  recordRunStart(input: RecordRunStartInput): Promise<void>;
-  recordRunEnd(input: RecordRunEndInput): Promise<void>;
-  lookupRun(runId: string): Promise<RunPointer | null>;
-  listRuns(opts?: ListRunsOpts): Promise<ListRunsResponse>;
-}
-```
-
-The run registry indexes workflow runs for `/runs`, `flue logs`, and administrative run listing. It does not store event payloads.
 
 ## `SessionData`
 
