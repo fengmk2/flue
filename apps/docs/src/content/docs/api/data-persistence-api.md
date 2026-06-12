@@ -195,7 +195,7 @@ interface SessionData {
 | --- | --- |
 | `version` | Storage format version. Flue rejects unsupported versions. |
 | `affinityKey` | Opaque Flue-generated provider-affinity key. Persist it unchanged. |
-| `entries` | Stored message, compaction, and branch-summary history. |
+| `entries` | Stored message and compaction history. |
 | `leafId` | Current active leaf in the session history tree, or `null`. |
 | `metadata` | Application-visible session metadata. |
 | `createdAt` | ISO timestamp for session creation. |
