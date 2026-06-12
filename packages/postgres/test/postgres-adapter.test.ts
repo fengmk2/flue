@@ -9,6 +9,7 @@
 import { PGlite } from '@electric-sql/pglite';
 import { describe, expect, it } from 'vitest';
 import type { SessionData } from '@flue/runtime';
+import { PersistedSchemaVersionError } from '@flue/runtime/adapter';
 import { postgresFromRunner, type PgRunner } from '../src/postgres-adapter.ts';
 import { defineEventStreamStoreContractTests, defineStoreContractTests } from '@flue/runtime/test-utils';
 
@@ -95,6 +96,21 @@ describe('postgres() PersistenceAdapter', () => {
 		adapter.connect();
 		if (!adapter.close) throw new Error('Expected adapter.close to be defined.');
 		await adapter.close();
+		await adapter.close();
+	});
+
+	it('stamps a fresh database and rejects migrate() against a newer schema version', async () => {
+		const runner = createPgliteRunner();
+		const adapter = postgresFromRunner(runner);
+		await adapter.migrate?.();
+
+		const rows = await runner.query(`SELECT value FROM flue_meta WHERE key = 'schema_version'`);
+		expect(rows).toEqual([{ value: '1' }]);
+
+		await runner.query(`UPDATE flue_meta SET value = '999' WHERE key = 'schema_version'`);
+		await expect(adapter.migrate?.()).rejects.toThrowError(PersistedSchemaVersionError);
+
+		if (!adapter.close) throw new Error('Expected adapter.close to be defined.');
 		await adapter.close();
 	});
 });

@@ -39,7 +39,9 @@ import type {
 	EventStreamStore,
 } from '@flue/runtime/adapter';
 import {
+	assertSupportedFlueSchemaVersion,
 	createDispatchAgentSubmissionInput,
+	FLUE_SCHEMA_VERSION,
 	formatOffset,
 	parseOffset,
 	createSessionStorageKey,
@@ -212,6 +214,25 @@ async function ensureTables(runner: PgRunner): Promise<void> {
 	// Postgres DDL is transactional — wrap all schema setup in a single
 	// transaction so partial failures don't leave the database half-migrated.
 	await runner.transaction(async (tx) => {
+		// Stamp a fresh database with the current schema version; refuse to
+		// touch a database recorded with an unknown or newer version.
+		await tx.query(`
+			CREATE TABLE IF NOT EXISTS flue_meta (
+				key TEXT PRIMARY KEY,
+				value TEXT NOT NULL
+			)
+		`);
+		const versionRows = await tx.query(`SELECT value FROM flue_meta WHERE key = 'schema_version'`);
+		const storedVersion = versionRows[0]?.value;
+		if (storedVersion === undefined || storedVersion === null) {
+			await tx.query(
+				`INSERT INTO flue_meta (key, value) VALUES ('schema_version', $1) ON CONFLICT (key) DO NOTHING`,
+				[String(FLUE_SCHEMA_VERSION)],
+			);
+		} else {
+			assertSupportedFlueSchemaVersion(String(storedVersion));
+		}
+
 		await tx.query(`
 			CREATE TABLE IF NOT EXISTS flue_sessions (
 				id TEXT PRIMARY KEY,
