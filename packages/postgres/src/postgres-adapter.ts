@@ -305,7 +305,6 @@ async function ensureTables(runner: PgRunner): Promise<void> {
 				stream_key TEXT NOT NULL,
 				segment_index INTEGER NOT NULL,
 				body TEXT NOT NULL,
-				created_at BIGINT NOT NULL,
 				PRIMARY KEY (stream_key, segment_index)
 			)
 		`);
@@ -320,8 +319,7 @@ async function ensureTables(runner: PgRunner): Promise<void> {
 		await tx.query(`
 			CREATE TABLE IF NOT EXISTS flue_agent_dispatch_receipts (
 				dispatch_id TEXT PRIMARY KEY,
-				accepted_at BIGINT NOT NULL,
-				settled_at BIGINT NOT NULL
+				accepted_at BIGINT NOT NULL
 			)
 		`);
 
@@ -371,8 +369,7 @@ async function ensureTables(runner: PgRunner): Promise<void> {
 			CREATE TABLE IF NOT EXISTS flue_event_streams (
 				path         TEXT PRIMARY KEY,
 				next_offset  INTEGER NOT NULL DEFAULT 0,
-				closed       BOOLEAN NOT NULL DEFAULT FALSE,
-				created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+				closed       BOOLEAN NOT NULL DEFAULT FALSE
 			)
 		`);
 
@@ -632,11 +629,11 @@ class PgSubmissionStore implements AgentSubmissionStore {
 
 	async appendStreamChunkSegment(streamKey: string, segmentIndex: number, body: string): Promise<boolean> {
 		const rows = await this.runner.query(
-			`INSERT INTO flue_agent_stream_chunks (stream_key, segment_index, body, created_at)
-			 VALUES ($1, $2, $3, $4)
+			`INSERT INTO flue_agent_stream_chunks (stream_key, segment_index, body)
+			 VALUES ($1, $2, $3)
 			 ON CONFLICT (stream_key, segment_index) DO NOTHING
 			 RETURNING stream_key`,
-			[streamKey, segmentIndex, body, Date.now()],
+			[streamKey, segmentIndex, body],
 		);
 		return rows.length > 0;
 	}
@@ -962,8 +959,8 @@ class PgSubmissionStore implements AgentSubmissionStore {
 		// with submissions admitted and settled during the async phase 2 gap.
 		await this.runner.transaction(async (tx) => {
 			await tx.query(
-				`INSERT INTO flue_agent_dispatch_receipts (dispatch_id, accepted_at, settled_at)
-				 SELECT submission_id, accepted_at, COALESCE(settled_at, accepted_at)
+				`INSERT INTO flue_agent_dispatch_receipts (dispatch_id, accepted_at)
+				 SELECT submission_id, accepted_at
 				 FROM flue_agent_submissions
 				 WHERE session_key = $1 AND kind = 'dispatch' AND status = 'settled'
 				   AND accepted_at <= $2
