@@ -10,6 +10,7 @@ your application decide what happens next. Flue provides ingress packages for:
 | ----------- | ------------------- | --------------------------------------------------------------------------------------- |
 | GitHub      | `@flue/github`      | `/channels/<file>/webhook`                                                              |
 | Stripe      | `@flue/stripe`      | `/channels/<file>/webhook`                                                              |
+| Notion      | `@flue/notion`      | `/channels/<file>/webhook`                                                              |
 | Slack       | `@flue/slack`       | `/channels/<file>/events`, `/channels/<file>/interactions`, `/channels/<file>/commands` |
 | Discord     | `@flue/discord`     | `/channels/<file>/interactions`                                                         |
 | Teams       | `@flue/teams`       | `/channels/<file>/activities`                                                           |
@@ -31,6 +32,7 @@ Use `flue add` to give your coding agent the complete integration recipe:
 ```sh
 flue add github --print | codex
 flue add stripe --print | codex
+flue add notion --print | codex
 flue add slack --print | codex
 flue add discord --print | codex
 flue add teams --print | codex
@@ -58,6 +60,7 @@ flue add https://provider.example/webhooks --category channel --print | codex
 
 See the provider guides for [GitHub](/docs/guide/channels/github/),
 [Stripe](/docs/guide/channels/stripe/),
+[Notion](/docs/guide/channels/notion/),
 [Slack](/docs/guide/channels/slack/),
 [Discord](/docs/guide/channels/discord/),
 [Microsoft Teams](/docs/guide/channels/teams/),
@@ -76,6 +79,7 @@ Each immediate file beneath `channels/` exports one named `channel` binding:
 ```txt
 src/channels/github.ts  -> /channels/github/webhook
 src/channels/stripe.ts  -> /channels/stripe/webhook
+src/channels/notion.ts  -> /channels/notion/webhook
 src/channels/slack.ts   -> /channels/slack/events
                           /channels/slack/interactions
                           /channels/slack/commands

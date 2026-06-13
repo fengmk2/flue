@@ -57,6 +57,7 @@ export const docsSections: DocsSection[] = [
 						items: [
 							{ title: 'GitHub', slug: 'guide/channels/github' },
 							{ title: 'Stripe', slug: 'guide/channels/stripe' },
+							{ title: 'Notion', slug: 'guide/channels/notion' },
 							{ title: 'Slack', slug: 'guide/channels/slack' },
 							{ title: 'Discord', slug: 'guide/channels/discord' },
 							{ title: 'Microsoft Teams', slug: 'guide/channels/teams' },
@@ -102,6 +103,7 @@ export const docsSections: DocsSection[] = [
 					{ title: 'Routing API', slug: 'api/routing-api' },
 					{ title: 'GitHub Channel', slug: 'api/github-channel' },
 					{ title: 'Stripe Channel', slug: 'api/stripe-channel' },
+					{ title: 'Notion Channel', slug: 'api/notion-channel' },
 					{ title: 'Slack Channel', slug: 'api/slack-channel' },
 					{ title: 'Discord Channel', slug: 'api/discord-channel' },
 					{ title: 'Teams Channel', slug: 'api/teams-channel' },

@@ -384,6 +384,221 @@ Focused review:
 - No unresolved correctness, security, packaging, Cloudflare, or developer
   experience findings remain.
 
+### Notion implementation — 2026-06-13
+
+Status:
+
+- Complete.
+
+Primary sources:
+
+- Notion webhook overview, endpoint verification, event delivery, signature,
+  event-type, and API-version documentation.
+- Official `@notionhq/client` v5.22.0 package declarations, runtime artifact,
+  README, release history, and Cloudflare compatibility fixes.
+- Current Cloudflare Workers Fetch, Web Crypto, and workerd-testing
+  documentation.
+
+Clean-room affirmation:
+
+- The design and future fixtures derive from Notion's primary specifications
+  and original synthetic payloads. No third-party adapter implementation,
+  types, fixtures, payloads, snapshots, or tests are being copied or
+  translated.
+
+Eligibility:
+
+- Eligible for stateless HTTPS webhook subscriptions. Notion delivers a
+  one-time unsigned `verification_token` request, then signs subsequent exact
+  request bodies with HMAC-SHA256 in `X-Notion-Signature`.
+- Events expose a unique delivery id, attempt number, workspace, subscription,
+  integration, authors, resource identity, and API version. Notion retries
+  failed deliveries up to eight times with exponential backoff and does not
+  guarantee ordering.
+- Notion documents no signed timestamp or replay window. The package can
+  authenticate exact bytes and expose delivery identity, but application-owned
+  deduplication is the only replay defense.
+- The official client is Fetch-injectable and documents Cloudflare Workers
+  compatibility after its v5.21 runtime fix. Actual SDK execution in workerd
+  without `nodejs_compat` remains required before completion.
+- Webhook subscription creation, OAuth, integration ownership, token storage,
+  and event selection remain developer-owned setup.
+
+Design:
+
+- Add `@flue/notion`, `examples/notion-channel`, `flue add notion`, a setup
+  guide, and an API reference.
+- Publish one fixed `POST /webhook` route.
+- Accept an optional `verificationToken` during the endpoint-verification
+  phase and an optional `verification({ c, verificationToken })` callback.
+  At least a configured token or a verification callback is required. The
+  callback is explicitly unauthenticated because Notion supplies the token
+  before a signing secret exists; it lets trusted application code capture the
+  token without making installation lifecycle part of Flue.
+- A verification request receives the normal handler-result contract, or an
+  empty `200` for a matching configured token. Once a token is configured, it
+  takes precedence over and blocks the temporary setup callback. Ordinary
+  events require a configured verification token; an endpoint still awaiting
+  configuration returns `503` so Notion can retry rather than invoking
+  application code without authentication.
+- Verify `X-Notion-Signature` against the exact body with Web Crypto before
+  parsing or invoking the event callback. Support optional fixed
+  `workspaceId`, `subscriptionId`, and `integrationId` checks with `403` on a
+  signed mismatch.
+- Type known events from the official SDK's exported webhook payload types,
+  widened only where current primary docs allow author type `agent`. Preserve
+  future verified event visibility through an explicit unknown-event wrapper
+  rather than weakening known-event switch narrowing.
+- Preserve the callback shape `webhook({ c, event })` and established response
+  behavior: no value becomes empty `200`, JSON-compatible values become JSON,
+  and ordinary Hono or Fetch responses pass through.
+- Do not invent a handler deadline because Notion documents retries but no
+  universal numeric response deadline.
+- Do not expose a package-level conversation key. Notion has unrelated page,
+  comment, database, data-source, view, and file identities, so applications
+  choose the resource identity appropriate to each workflow.
+
+Dependencies and example:
+
+- `@flue/notion` depends directly on Hono and peers on
+  `@notionhq/client` and `@types/node`; the packed strict consumer proved that
+  the official declarations require Node types even though the runtime path is
+  Fetch-only. The package does not depend on `@flue/runtime` and does not use
+  the SDK client for ingress.
+- The editable example exports the official Notion client with injected Fetch,
+  groups useful page event cases, dispatches by an explicitly local page-based
+  instance id, and defines a narrow page-retrieval tool bound to that
+  already-selected page.
+- Keep the verification callback visible but commented out in the example and
+  recipe. Explain that it is temporary setup code and that the received token
+  must be stored as `NOTION_WEBHOOK_VERIFICATION_TOKEN` before ordinary event
+  delivery.
+- Workerd tests must execute Web Crypto ingress verification and a real
+  official SDK page request against fake Fetch without `nodejs_compat`.
+
+Non-goals:
+
+- Webhook subscription creation, event-selection policy, public-integration
+  approval, OAuth, token rotation, installation persistence, deduplication,
+  ordering, replay recovery, and broad outbound tools.
+- Fetching full page or database state during ingress. Notion intentionally
+  sends lightweight changed-resource notifications; the application decides
+  when its project-owned client should retrieve current state.
+- Treating workspace, subscription, integration, page, or delivery ids as
+  authorization capabilities.
+
+Foundation reflection to revisit after implementation:
+
+- Whether the one-time unauthenticated verification callback fits the existing
+  optional-surface conventions without shared routing changes.
+- Whether peer-typing against a Fetch-compatible but CommonJS provider SDK
+  exposes a repeated packed-consumer or Workers issue after Stripe.
+- Whether page conversation identity is useful enough to keep provider-local
+  without implying that every resource webhook has a conversation.
+
+Implementation:
+
+- Added `@flue/notion` with one fixed `POST /webhook` route, explicit unsigned
+  setup-token handling, exact-byte HMAC-SHA256 verification, optional fixed
+  workspace/subscription/integration checks, body limiting, SDK-derived known
+  event types, future event/API-version fallback, and the established
+  Hono-compatible response contract.
+- Added original Node and workerd protocol suites. They cover exact bytes,
+  missing, malformed, and incorrect signatures, unsigned setup capture,
+  configured-token precedence, unconfigured signed delivery, fixed identity,
+  content type, malformed and streamed lengths, body limits, malformed known
+  payloads, optional principals, future events and API versions, representative
+  comment/page/database/data-source/file/view families, handler results,
+  failures, constructor validation, and route publication.
+- Added `examples/notion-channel` with the official client, one shared
+  Fetch-adapting client factory, grouped page events, a local page-based agent
+  instance id, a page-bound retrieval tool, temporary setup guidance, and Node
+  and workerd fake-Fetch tests.
+- Added `flue add notion`, the Notion connector recipe, setup and API docs,
+  navigation and channel overview entries, README, changelog, and publish
+  wiring.
+
+Validation:
+
+- Package build, strict typecheck, 17 Node tests, and two workerd ingress tests
+  pass. Workerd executes exact-byte Web Crypto verification and setup handling
+  without requiring `nodejs_compat`.
+- Example strict typecheck, Node fake-client test, workerd fake-client test,
+  Node build, and Cloudflare target build pass. Both runtime tests execute the
+  same exported `createNotionClient()` factory used to create the project-owned
+  client and fail unexpected network destinations.
+- A built Node application returned an empty `200` for an original locally
+  signed future event and `401` for the same signature over altered bytes.
+- The focused CLI suite passes, and the built CLI returns the Notion recipe
+  through the locally built connector registry.
+- Documentation typecheck and production build pass. The connector site build
+  serves `/cli/connectors/notion.md`.
+- Publish preparation and package packing pass. The tarball contains only the
+  intended distribution files, prepared docs, README, license, and manifest.
+- A clean strict TypeScript consumer installed only the packed
+  `@flue/notion` package and `@notionhq/client`; required peers resolved,
+  custom Hono environment types compiled, and the constructor imported at
+  runtime.
+- Credential-pattern, formatting, and whitespace checks found no logged or
+  embedded real secret. No verification or client test contacted Notion.
+
+Corrections and deviations:
+
+- The published `@notionhq/client@5.22.0` contains webhook payload types but
+  not the Web Crypto verification helpers added to the official repository
+  shortly after that release. The channel implements the documented
+  HMAC-SHA256 operation directly instead of depending on unreleased source.
+- The package does not expose the initially proposed page conversation helper.
+  Notion has no universal conversation across its unrelated resource families;
+  the example instead labels its page-based instance id as an application
+  convention.
+- The configured signing token now takes precedence over the temporary setup
+  callback. Accidentally leaving setup code present cannot route arbitrary
+  unsigned values into application secret storage after configuration.
+- The official SDK's published declarations omit documented `agent`
+  principals and import `node:http`. The package widens `authors` and
+  `accessible_by` to the documented principal set and declares
+  `@types/node >=18` as a required peer. This adds no Node runtime code.
+- The first clean consumer proved that projects constraining
+  `compilerOptions.types` must include `"node"`; the recipe, guide, README,
+  and example configuration now state that requirement.
+- One parallel verification command raced an example Node build against a CLI
+  rebuild that temporarily removed `dist/flue.js`. Ordered runtime, CLI, and
+  example checks pass; this was verification ordering rather than a source
+  defect.
+
+Foundation reflection:
+
+- Notion's setup handshake fits one fixed route without shared routing changes.
+  Its unauthenticated callback remains provider-specific, and configured-token
+  precedence supplies the safety invariant needed to keep it local.
+- Known event validation must justify SDK-derived callback types. Notion's
+  larger provider union required family-level structural checks and explicit
+  future-version fallback; no generic cross-provider validator would reduce
+  that provider-specific work safely.
+- The repeated `@types/node` declaration friction seen with Stripe is caused by
+  provider SDK type graphs, not Flue runtime code. Compatible required peers
+  plus clean packed-consumer checks remain the least surprising solution.
+- Fixed discovery, the single-object callback, normal response handling,
+  example client ownership, and Node/workerd conventions all held. No shared
+  channel machinery change is justified.
+
+Focused review:
+
+- Independent review found that the first known-event guard retained optional
+  SDK fields such as `accessible_by` without validating them. The final
+  implementation validates every retained base field and each supported
+  resource-family payload before exposing SDK-derived types; malformed
+  principals and family data receive `400`.
+- Review found that the first example tests created separate SDK clients.
+  Production and tests now share the exported `createNotionClient()` factory,
+  so Node and workerd cover the actual Fetch adapter used by `client`.
+- Review found stale roadmap claims about a canonical page key and setup-token
+  precedence. The design and implementation log now match the shipped local
+  page convention and configured-token behavior.
+- No unresolved correctness, security, packaging, Cloudflare, or developer
+  experience findings remain.
+
 ## 6. Keep These As Separate Product Decisions
 
 ### Generic HTTP or webhook adapter

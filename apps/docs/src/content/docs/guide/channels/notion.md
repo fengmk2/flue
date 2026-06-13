@@ -1,0 +1,230 @@
+---
+title: Notion
+description: Receive signed Notion webhook events and use the official client from application-owned tools.
+---
+
+## Add Notion
+
+Run the Notion recipe through your coding agent:
+
+```sh
+flue add notion --print | codex
+```
+
+It installs `@flue/notion` and the official
+`@notionhq/client@5.22.0`. The recipe creates a channel module with named
+`channel` and `client` exports.
+
+Configure the webhook URL as:
+
+```txt
+https://example.com/channels/notion/webhook
+```
+
+`NOTION_WEBHOOK_VERIFICATION_TOKEN` verifies recurring webhook events.
+`NOTION_TOKEN` authenticates outbound API calls. They are separate credentials.
+
+The package declares `@types/node` as a required peer because the official
+client's declarations import `node:http`. Add it as a development dependency
+when the package manager does not install required peers automatically. This
+is a type dependency and does not add Node code to a Worker bundle. If
+`compilerOptions.types` is present, include `"node"` in that list.
+
+## Channel module
+
+```ts title="src/channels/notion.ts"
+import { Client } from '@notionhq/client';
+import { createNotionChannel } from '@flue/notion';
+import { defineTool, dispatch } from '@flue/runtime';
+import assistant from '../agents/assistant.ts';
+
+const PAGE_INSTANCE_PREFIX = 'notion-page:';
+
+const notionFetch: NonNullable<NonNullable<ConstructorParameters<typeof Client>[0]>['fetch']> = (
+  url,
+  init,
+) =>
+  globalThis.fetch(url, {
+    method: init?.method,
+    headers: init?.headers,
+    body: init?.body,
+  });
+
+const verificationToken = process.env.NOTION_WEBHOOK_VERIFICATION_TOKEN || undefined;
+
+export const client = new Client({
+  auth: process.env.NOTION_TOKEN!,
+  fetch: notionFetch,
+});
+
+export const channel = createNotionChannel({
+  ...(verificationToken ? { verificationToken } : {}),
+  workspaceId: process.env.NOTION_WORKSPACE_ID,
+  subscriptionId: process.env.NOTION_SUBSCRIPTION_ID,
+  integrationId: process.env.NOTION_INTEGRATION_ID,
+
+  // Initial setup only: temporarily use this instead of verificationToken and
+  // persist the received value through the project's secure secret workflow.
+  // async verification({ verificationToken }) {
+  //   await saveNotionWebhookVerificationToken(verificationToken);
+  // },
+
+  // Path: /channels/notion/webhook
+  async webhook({ event }) {
+    switch (event.type) {
+      case 'page.created':
+      case 'page.content_updated':
+      case 'page.properties_updated':
+      case 'page.moved':
+      case 'page.undeleted':
+      case 'page.locked':
+      case 'page.unlocked': {
+        await dispatch(assistant, {
+          id: pageInstanceId(event.entity.id),
+          input: {
+            type: `notion.${event.type}`,
+            deliveryId: event.id,
+            attemptNumber: event.attempt_number,
+            pageId: event.entity.id,
+            authors: event.authors,
+            data: event.data,
+          },
+        });
+        return;
+      }
+      default:
+        return;
+    }
+  },
+});
+
+export function retrievePage(pageId: string) {
+  return defineTool({
+    name: 'retrieve_notion_page',
+    description: 'Retrieve the Notion page bound to this agent.',
+    parameters: {
+      type: 'object',
+      properties: {},
+      additionalProperties: false,
+    },
+    async execute() {
+      const page = await client.pages.retrieve({ page_id: pageId });
+      return JSON.stringify({
+        id: page.id,
+        object: page.object,
+        archived: 'archived' in page ? page.archived : undefined,
+        inTrash: 'in_trash' in page ? page.in_trash : undefined,
+      });
+    },
+  });
+}
+
+export function pageInstanceId(pageId: string): string {
+  if (!pageId) throw new TypeError('Notion page id must be non-empty.');
+  return `${PAGE_INSTANCE_PREFIX}${encodeURIComponent(pageId)}`;
+}
+
+export function pageIdFromInstanceId(id: string): string {
+  if (!id.startsWith(PAGE_INSTANCE_PREFIX)) {
+    throw new TypeError('Expected a local Notion page instance id.');
+  }
+  const pageId = decodeURIComponent(id.slice(PAGE_INSTANCE_PREFIX.length));
+  if (!pageId) throw new TypeError('Expected a local Notion page instance id.');
+  return pageId;
+}
+```
+
+Known events retain the official SDK's provider-native snake-case fields.
+Verified event types newer than the installed SDK arrive as `type: 'unknown'`
+with `eventType`, normalized delivery metadata, and the complete parsed
+payload under `raw`.
+
+The `notion-page:` id is a local application convention because
+`@flue/notion` does not invent one universal conversation key for unrelated
+Notion resources. This example uses the page id because one project-owned
+client selects the installation. Include workspace or installation identity
+when one agent can cross credential domains.
+
+## Bind the tool
+
+```ts title="src/agents/assistant.ts"
+import { createAgent } from '@flue/runtime';
+import { pageIdFromInstanceId, retrievePage } from '../channels/notion.ts';
+
+export default createAgent(({ id }) => ({
+  model: 'anthropic/claude-haiku-4-5',
+  tools: [retrievePage(pageIdFromInstanceId(id))],
+}));
+```
+
+The model can request the current page summary, but it cannot select another
+workspace, page, token, or API route. Trusted application code binds the page
+from the verified event.
+
+Notion webhook payloads intentionally describe a change rather than returning
+all current resource state. Decide in application code whether an event should
+trigger a page, block, comment, database, data-source, view, or file fetch.
+Avoid retrieving every changed resource during ingress by default.
+
+The example omits `page.deleted` because the bound retrieval tool may no longer
+be able to read that page. Route deletion events to application persistence
+when they matter. Comment events expose `event.data.page_id` and can use the
+same local page identity when that matches the application's agent policy.
+
+## Initial verification
+
+Notion's first request is different from recurring event delivery. It is an
+unsigned JSON object containing only `verification_token`, sent before a
+signing secret exists.
+
+Temporarily replace `verificationToken` in the example with the commented
+`verification({ verificationToken })` callback. Persist the received token
+through the project's secure secret workflow, then:
+
+1. Set `NOTION_WEBHOOK_VERIFICATION_TOKEN`.
+2. Redeploy with `verificationToken` enabled.
+3. Remove the temporary setup callback.
+
+Do not log or dispatch the verification token. The callback is setup code, not
+authenticated application ingress. While no `verificationToken` is configured,
+signed recurring events receive `503` and the `webhook` callback is not run.
+
+For recurring events, Notion sends
+`X-Notion-Signature: sha256=<hex-hmac>`. The package verifies HMAC-SHA256 over
+the exact request bytes before parsing. Configure optional `workspaceId`,
+`subscriptionId`, or `integrationId` constraints when the route belongs to one
+fixed Notion installation.
+
+## Delivery behavior
+
+Notion can retry failed deliveries up to eight times with exponential backoff
+and does not guarantee event ordering. `event.id` is the delivery id and
+`event.attempt_number` identifies the retry attempt. Claim delivery ids in
+application-owned durable storage before dispatch when duplicate admission is
+unacceptable.
+
+Returning nothing produces an empty `200`. A JSON-compatible value becomes the
+response body. A normal Hono or Fetch `Response` passes through unchanged. The
+package does not impose an invented handler deadline.
+
+The application owns webhook subscription creation, event selection, OAuth,
+installation and token storage, deduplication, ordering recovery, resource
+fetching, and outbound tools.
+
+## Cloudflare Workers
+
+Ordinary API calls through `@notionhq/client@5.22.0` use the injected Fetch and
+work in Cloudflare Workers without `nodejs_compat`. Initialize secrets through
+the project's typed Worker binding convention rather than assuming
+`process.env`, and verify the complete Worker build.
+
+The official client's OAuth methods currently use Node `Buffer` to construct
+Basic authentication. OAuth is outside this channel example; ordinary API-call
+compatibility does not imply that the OAuth methods are Worker-native.
+
+Test with original synthetic verification and event bodies. Generate local
+HMAC signatures with Web Crypto, and exercise `Client.pages.retrieve()` through
+an injected fake Fetch in Node and workerd. The fake transport should reject
+unexpected URLs so tests cannot contact Notion.
+
+See the [`@flue/notion` API reference](/docs/api/notion-channel/).
