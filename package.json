@@ -13,7 +13,7 @@
 		"build": "turbo build",
 		"test": "turbo test",
 		"test:integration": "pnpm --dir packages/cli run test:integration:cloudflare",
-		"check": "turbo run build check:lint check:types test",
+		"check": "turbo run build check:lint check:types && turbo run test",
 		"check:lint": "biome lint . && knip",
 		"check:knip": "knip",
 		"check:types": "turbo run check:types --filter=!apps-www",

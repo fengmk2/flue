@@ -9,6 +9,7 @@
 		"preview": "astro preview",
 		"deploy": "pnpm run build && pnpm exec wrangler deploy",
 		"astro": "astro",
+		"check": "astro check",
 		"check:types": "astro check"
 	},
 	"dependencies": {
