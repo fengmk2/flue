@@ -1,9 +1,25 @@
+import type { Activity } from 'botframework-schema';
 import type { Context, Env, Handler } from 'hono';
 import { defaultBotFrameworkOpenIdMetadataUrl, defaultBotFrameworkTokenIssuer } from './auth.ts';
 import { InvalidTeamsConversationKeyError, InvalidTeamsInputError } from './errors.ts';
-import { createTeamsActivitiesHandler } from './routes.ts';
+import { createTeamsActivitiesHandler, deriveDestination } from './routes.ts';
 
 export { InvalidTeamsConversationKeyError, InvalidTeamsInputError } from './errors.ts';
+
+/**
+ * Provider-native Bot Framework activity payload, re-exported from the official
+ * `botframework-schema` package. Microsoft Teams delivers these to the
+ * activities endpoint with their documented field names and nesting.
+ */
+export type {
+	Activity,
+	ChannelAccount,
+	ConversationAccount,
+	Entity,
+	Attachment,
+	Mention,
+	MessageReaction,
+} from 'botframework-schema';
 
 export type JsonValue =
 	| null
@@ -33,15 +49,8 @@ export interface TeamsChannelOptions<E extends Env = Env> {
 	fetch?: typeof globalThis.fetch;
 	/** Maximum request-body size in bytes. Defaults to 1 MiB. */
 	bodyLimit?: number;
-	/** Handler deadline in milliseconds. Defaults to and may not exceed 4500. */
-	handlerTimeoutMs?: number;
+	/** Receives verified provider-native Bot Framework activities. */
 	activities(input: TeamsActivitiesHandlerInput<E>): TeamsHandlerResult;
-}
-
-export interface TeamsAccountRef {
-	id: string;
-	name?: string;
-	aadObjectId?: string;
 }
 
 /** Stable routing identity derived from one verified Teams activity. */
@@ -56,86 +65,31 @@ export interface TeamsConversationRef {
 	channelId?: string;
 }
 
-export interface TeamsMention {
-	mentioned: TeamsAccountRef;
-	text?: string;
-}
-
-export interface TeamsActivityEnvelope<TType extends string, TPayload> {
-	type: TType;
-	activityId?: string;
-	timestamp?: string;
-	tenantId: string;
-	serviceUrl: string;
-	destination: TeamsConversationRef;
-	sender?: TeamsAccountRef;
-	bot: TeamsAccountRef;
-	payload: TPayload;
-	/** Complete parsed activity after request authentication and identity checks. */
-	raw: unknown;
-}
-
-export interface TeamsMessagePayload {
-	text?: string;
-	locale?: string;
-	attachments: readonly unknown[];
-	mentions: readonly TeamsMention[];
-	value?: unknown;
-}
-
-export interface TeamsConversationUpdatePayload {
-	membersAdded: readonly TeamsAccountRef[];
-	membersRemoved: readonly TeamsAccountRef[];
-	topicName?: string;
-}
-
-export interface TeamsInvokePayload {
-	name: string;
-	value?: unknown;
-}
-
-export interface TeamsMessageReactionPayload {
-	reactionsAdded: readonly string[];
-	reactionsRemoved: readonly string[];
-}
-
-export type TeamsMessageActivity = TeamsActivityEnvelope<'message', TeamsMessagePayload>;
-export type TeamsConversationUpdateActivity = TeamsActivityEnvelope<
-	'conversation_update',
-	TeamsConversationUpdatePayload
->;
-export type TeamsInvokeActivity = TeamsActivityEnvelope<'invoke', TeamsInvokePayload>;
-export type TeamsMessageReactionActivity = TeamsActivityEnvelope<
-	'message_reaction',
-	TeamsMessageReactionPayload
->;
-
-export interface TeamsUnknownActivity extends Omit<
-	TeamsActivityEnvelope<'unknown', never>,
-	'payload'
-> {
-	activityType: string;
-}
-
-export type TeamsActivity =
-	| TeamsMessageActivity
-	| TeamsConversationUpdateActivity
-	| TeamsInvokeActivity
-	| TeamsMessageReactionActivity
-	| TeamsUnknownActivity;
-
 type TeamsHandlerValue = undefined | JsonValue | Response;
 
+/**
+ * Returning nothing produces an empty `200`. JSON-compatible values become
+ * JSON responses, and Hono or Fetch responses pass through unchanged.
+ */
 export type TeamsHandlerResult = TeamsHandlerValue | Promise<TeamsHandlerValue>;
 
+/** Input delivered to the activities callback after request authentication. */
 export interface TeamsActivitiesHandlerInput<E extends Env = Env> {
 	c: Context<E>;
-	activity: TeamsActivity;
+	/** Provider-native Bot Framework activity, verified but otherwise unmodified. */
+	activity: Activity;
 }
 
 /** Verified activities and canonical identity helpers. */
 export interface TeamsChannel<E extends Env = Env> {
 	readonly routes: readonly ChannelRoute<E>[];
+	/**
+	 * Derives the canonical routing identity from a verified activity. Verified
+	 * activities delivered to the `activities` callback always derive a
+	 * destination; throws `InvalidTeamsInputError` for an activity that lacks the
+	 * minimal structure needed to address a reply.
+	 */
+	destination(activity: Activity): TeamsConversationRef;
 	/** Serializes a canonical namespaced identifier. It is not an authorization capability. */
 	conversationKey(ref: TeamsConversationRef): string;
 	/** Parses only canonical keys produced by `conversationKey()`. */
@@ -146,7 +100,8 @@ export interface TeamsChannel<E extends Env = Env> {
  * Creates a fixed-application, fixed-tenant Microsoft Teams activity channel.
  *
  * Bot Connector JWTs are verified through OpenID metadata and endorsed signing
- * keys before activities are normalized or passed to the application.
+ * keys before the provider-native activity is passed to the application. The
+ * channel does not deduplicate retried deliveries.
  */
 export function createTeamsChannel<E extends Env = Env>(
 	options: TeamsChannelOptions<E>,
@@ -159,12 +114,17 @@ export function createTeamsChannel<E extends Env = Env>(
 		tokenIssuer: options.tokenIssuer,
 		fetch: options.fetch,
 		bodyLimit: options.bodyLimit,
-		handlerTimeoutMs: options.handlerTimeoutMs,
 		activities: options.activities,
 	});
 
 	const channel: TeamsChannel<E> = {
 		routes: [{ method: 'POST', path: '/activities', handler }],
+		destination(activity) {
+			if (!activity || typeof activity !== 'object') throw new InvalidTeamsInputError('activity');
+			const ref = deriveDestination(activity as unknown as Record<string, unknown>, options.tenantId);
+			if (!ref) throw new InvalidTeamsInputError('activity');
+			return ref;
+		},
 		conversationKey(ref) {
 			assertConversationRef(ref);
 			return [

@@ -40,7 +40,7 @@ describe('createTeamsChannel()', () => {
 		expect(activities).not.toHaveBeenCalled();
 	});
 
-	it('verifies and normalizes one Teams message activity', async () => {
+	it('verifies and forwards the provider-native activity with a derived destination', async () => {
 		const activities = vi.fn((_input: unknown) => ({ accepted: true }));
 		const teams = testChannel({ activities });
 		const raw = messageActivity({
@@ -67,45 +67,23 @@ describe('createTeamsChannel()', () => {
 
 		expect(response.status).toBe(200);
 		expect(await response.json()).toEqual({ accepted: true });
-		expect((activities.mock.calls[0]?.[0] as { activity: unknown } | undefined)?.activity).toEqual({
-			type: 'message',
-			activityId: 'activity-1',
-			timestamp: '2026-06-13T17:20:00.000Z',
+		const input = activities.mock.calls[0]?.[0] as { activity: unknown } | undefined;
+		// The provider-native activity is forwarded unmodified.
+		expect(input?.activity).toEqual(raw);
+		// The canonical routing identity is derived through the channel helper.
+		expect(teams.destination(raw as never)).toEqual({
 			tenantId: TENANT_ID,
 			serviceUrl: SERVICE_URL,
-			destination: {
-				tenantId: TENANT_ID,
-				serviceUrl: SERVICE_URL,
-				conversationId: 'conversation-1',
-				scope: 'channel',
-				botId: '28:bot-id',
-				threadId: 'root-message-1',
-				teamId: 'team-1',
-				channelId: 'channel-1',
-			},
-			sender: {
-				id: '29:user-id',
-				name: 'Ada',
-				aadObjectId: 'user-object-id',
-			},
-			bot: { id: '28:bot-id', name: 'Flue Bot' },
-			payload: {
-				text: '<at>Flue Bot</at> review café',
-				locale: 'en-US',
-				attachments: [{ contentType: 'application/vnd.microsoft.card.adaptive' }],
-				mentions: [
-					{
-						text: '<at>Flue Bot</at>',
-						mentioned: { id: '28:bot-id', name: 'Flue Bot' },
-					},
-				],
-				value: { action: 'review' },
-			},
-			raw,
+			conversationId: 'conversation-1',
+			scope: 'channel',
+			botId: '28:bot-id',
+			threadId: 'root-message-1',
+			teamId: 'team-1',
+			channelId: 'channel-1',
 		});
 	});
 
-	it('normalizes conversation updates invokes reactions and unknown activity types', async () => {
+	it('forwards conversation updates invokes reactions and other activity types unmodified', async () => {
 		const seen: unknown[] = [];
 		const teams = testChannel({
 			activities({ activity }) {
@@ -114,65 +92,38 @@ describe('createTeamsChannel()', () => {
 		});
 		const app = channelApp(teams);
 
-		const update = await app.request(
-			await signedRequest(
-				messageActivity({
-					type: 'conversationUpdate',
-					membersAdded: [{ id: '29:new-user', name: 'Grace' }],
-					membersRemoved: [{ id: '29:old-user' }],
-					topicName: 'Synthetic launch',
-				}),
-			),
-		);
-		const invoke = await app.request(
-			await signedRequest(
-				messageActivity({
-					type: 'invoke',
-					name: 'adaptiveCard/action',
-					value: { action: { type: 'Action.Execute', verb: 'approve' } },
-				}),
-			),
-		);
-		const reaction = await app.request(
-			await signedRequest(
-				messageActivity({
-					type: 'messageReaction',
-					reactionsAdded: [{ type: 'heart' }],
-					reactionsRemoved: [{ type: 'like' }],
-				}),
-			),
-		);
-		const unknown = await app.request(
-			await signedRequest(messageActivity({ type: 'installationUpdate', action: 'add' })),
-		);
+		const conversationUpdate = messageActivity({
+			type: 'conversationUpdate',
+			membersAdded: [{ id: '29:new-user', name: 'Grace' }],
+			membersRemoved: [{ id: '29:old-user' }],
+			topicName: 'Synthetic launch',
+		});
+		const invokeActivity = messageActivity({
+			type: 'invoke',
+			name: 'adaptiveCard/action',
+			value: { action: { type: 'Action.Execute', verb: 'approve' } },
+		});
+		const reactionActivity = messageActivity({
+			type: 'messageReaction',
+			reactionsAdded: [{ type: 'heart' }],
+			reactionsRemoved: [{ type: 'like' }],
+		});
+		const installationActivity = messageActivity({ type: 'installationUpdate', action: 'add' });
+
+		const update = await app.request(await signedRequest(conversationUpdate));
+		const invoke = await app.request(await signedRequest(invokeActivity));
+		const reaction = await app.request(await signedRequest(reactionActivity));
+		const unknown = await app.request(await signedRequest(installationActivity));
 
 		expect([update.status, invoke.status, reaction.status, unknown.status]).toEqual([
 			200, 200, 200, 200,
 		]);
+		// Each activity is forwarded with Bot Framework's native type and field names.
 		expect(seen).toEqual([
-			expect.objectContaining({
-				type: 'conversation_update',
-				payload: {
-					membersAdded: [{ id: '29:new-user', name: 'Grace' }],
-					membersRemoved: [{ id: '29:old-user' }],
-					topicName: 'Synthetic launch',
-				},
-			}),
-			expect.objectContaining({
-				type: 'invoke',
-				payload: {
-					name: 'adaptiveCard/action',
-					value: { action: { type: 'Action.Execute', verb: 'approve' } },
-				},
-			}),
-			expect.objectContaining({
-				type: 'message_reaction',
-				payload: { reactionsAdded: ['heart'], reactionsRemoved: ['like'] },
-			}),
-			expect.objectContaining({
-				type: 'unknown',
-				activityType: 'installationUpdate',
-			}),
+			conversationUpdate,
+			invokeActivity,
+			reactionActivity,
+			installationActivity,
 		]);
 	});
 
@@ -194,29 +145,25 @@ describe('createTeamsChannel()', () => {
 		expect(await honoResponse.json()).toEqual({ status: 'queued' });
 	});
 
-	it('returns 500 when handlers throw time out or return invalid JSON', async () => {
+	it('lets the Hono error handler handle callback failures', async () => {
+		const failure = new Error('failed');
 		const throwing = testChannel({
 			activities() {
-				throw new Error('failed');
+				throw failure;
 			},
 		});
-		const timeout = testChannel({
-			handlerTimeoutMs: 5,
-			activities: () => new Promise(() => {}),
-		});
-		const invalid = testChannel({
-			activities: () => ({ count: Number.NaN }),
+		const app = channelApp(throwing);
+		let received: Error | undefined;
+		app.onError((error, c) => {
+			received = error;
+			return c.text('handled', 503);
 		});
 
-		expect(
-			(await channelApp(throwing).request(await signedRequest(messageActivity()))).status,
-		).toBe(500);
-		expect((await channelApp(timeout).request(await signedRequest(messageActivity()))).status).toBe(
-			500,
-		);
-		expect((await channelApp(invalid).request(await signedRequest(messageActivity()))).status).toBe(
-			500,
-		);
+		const response = await app.request(await signedRequest(messageActivity()));
+
+		expect(response.status).toBe(503);
+		expect(await response.text()).toBe('handled');
+		expect(received).toBe(failure);
 	});
 
 	it('rejects missing invalid expired and wrong-audience bearer tokens', async () => {
@@ -422,6 +369,8 @@ describe('createTeamsChannel()', () => {
 				botId: 'B1',
 			}),
 		).toThrow(InvalidTeamsInputError);
+		// destination() throws when the activity lacks the minimal reply structure.
+		expect(() => teams.destination({ type: 'message' } as never)).toThrow(InvalidTeamsInputError);
 	});
 });
 

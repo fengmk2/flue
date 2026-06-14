@@ -31,6 +31,7 @@
 		"test:workerd": "vitest run --config vitest.workerd.config.ts"
 	},
 	"dependencies": {
+		"botframework-schema": "4.23.3",
 		"hono": "4.12.22",
 		"jose": "6.2.3"
 	},

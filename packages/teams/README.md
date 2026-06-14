@@ -22,9 +22,12 @@ Place this export in `channels/teams.ts`. Flue discovers it and serves
 
 The package validates Bot Connector bearer tokens through Microsoft's OpenID
 metadata and endorsed JWKS keys, checks the token audience, issuer, expiry,
-channel endorsement, exact service URL, and configured tenant, then normalizes
-messages, conversation updates, invokes, reactions, and unknown verified
-activity types.
+channel endorsement, exact service URL, and configured tenant, then hands your
+callback the verified provider-native Bot Framework `Activity` unchanged. Switch
+on the native `activity.type` (`message`, `conversationUpdate`, `invoke`,
+`messageReaction`, and other Bot Framework types), and call
+`channel.destination(activity)` to derive the canonical routing identity when
+you need to address a reply.
 
 This package does not include an outbound Teams client, OAuth credential
 storage, installation flow, or model tools. Run `flue add teams` to generate

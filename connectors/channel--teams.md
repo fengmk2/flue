@@ -72,24 +72,17 @@ export const channel = createTeamsChannel({
 
   // Path: /channels/teams/activities
   async activities({ activity }) {
-    switch (activity.type) {
-      case 'message': {
-        if (!activity.payload.text) return;
-        await dispatch(assistant, {
-          id: channel.conversationKey(activity.destination),
-          input: {
-            type: 'teams.message',
-            activityId: activity.activityId,
-            sender: activity.sender,
-            text: activity.payload.text,
-            mentions: activity.payload.mentions,
-          },
-        });
-        return;
-      }
-      default:
-        return;
-    }
+    if (activity.type !== 'message' || !activity.text) return;
+    await dispatch(assistant, {
+      id: channel.conversationKey(channel.destination(activity)),
+      input: {
+        type: 'teams.message',
+        activityId: activity.id,
+        sender: activity.from,
+        text: activity.text,
+        entities: activity.entities,
+      },
+    });
   },
 });
 
@@ -111,10 +104,13 @@ export function postMessage(ref: TeamsConversationRef) {
 }
 ```
 
-Messages, conversation updates, invoke activities, and reactions have typed
-variants. Other authenticated activity types arrive as `type: 'unknown'`.
-Returning nothing produces an empty `200`; return JSON for an invoke body or
-use the Hono context for explicit status and response control.
+The callback receives the provider-native Bot Framework `Activity` (typed by
+`botframework-schema`). Derive the canonical routing identity with
+`channel.destination(activity)` when you need to address a reply. Switch on
+`activity.type` (`message`, `conversationUpdate`, `invoke`, `messageReaction`,
+and other Bot Framework types) using Microsoft's documented field names.
+Returning nothing produces an empty `200`; return JSON for an invoke response
+body or use the Hono context for explicit status and response control.
 
 ## Wire the agent
 

@@ -24,24 +24,17 @@ export const channel = createTeamsChannel({
 
 	// Path: /channels/teams/activities
 	async activities({ activity }) {
-		switch (activity.type) {
-			case 'message': {
-				if (!activity.payload.text) return;
-				await dispatch(assistant, {
-					id: channel.conversationKey(activity.destination),
-					input: {
-						type: 'teams.message',
-						activityId: activity.activityId,
-						sender: activity.sender,
-						text: activity.payload.text,
-						mentions: activity.payload.mentions,
-					},
-				});
-				return;
-			}
-			default:
-				return;
-		}
+		if (activity.type !== 'message' || !activity.text) return;
+		await dispatch(assistant, {
+			id: channel.conversationKey(channel.destination(activity)),
+			input: {
+				type: 'teams.message',
+				activityId: activity.id,
+				sender: activity.from,
+				text: activity.text,
+				entities: activity.entities,
+			},
+		});
 	},
 });
 

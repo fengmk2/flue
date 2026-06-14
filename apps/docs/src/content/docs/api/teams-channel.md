@@ -26,8 +26,7 @@ interface TeamsChannelOptions<E extends Env = Env> {
   tokenIssuer?: string;
   fetch?: typeof globalThis.fetch;
   bodyLimit?: number;
-  handlerTimeoutMs?: number;
-  activities(input: { c: Context<E>; activity: TeamsActivity }): TeamsHandlerResult;
+  activities(input: { c: Context<E>; activity: Activity }): TeamsHandlerResult;
 }
 ```
 
@@ -39,21 +38,30 @@ interface TeamsChannelOptions<E extends Env = Env> {
 | `tokenIssuer`       | Expected issuer. Defaults to `https://api.botframework.com`.  |
 | `fetch`             | Fetch used for OpenID metadata and JWKS discovery.            |
 | `bodyLimit`         | Maximum request body. Default: 1 MiB.                         |
-| `handlerTimeoutMs`  | Handler deadline. Default and maximum: 4500 milliseconds.     |
 | `activities`        | Receives every authenticated and structurally valid activity. |
+
+The `activity` is the provider-native Bot Framework `Activity`, re-exported from
+`botframework-schema`. It is verified but otherwise unmodified.
 
 ```ts
 type TeamsHandlerResult = void | JsonValue | Response | Promise<void | JsonValue | Response>;
 ```
 
-Returning nothing produces an empty `200`. A JSON-compatible value becomes a
-JSON response. An ordinary Hono or Fetch `Response` passes through unchanged.
+Returning nothing produces an empty `200`. A JSON-compatible value is serialized
+with `Response.json` and returned as a JSON response. An ordinary Hono or Fetch
+`Response` passes through unchanged.
+
+`invoke` activities expect a JSON acknowledgement body in the response (for
+example, `adaptiveCard/action` responses), so return the appropriate value or
+`Response`. The Bot Connector retries on any non-2xx status, so reserve error
+statuses for deliveries you want redelivered.
 
 ## `TeamsChannel`
 
 ```ts
 interface TeamsChannel<E extends Env = Env> {
   readonly routes: readonly ChannelRoute<E>[];
+  destination(activity: Activity): TeamsConversationRef;
   conversationKey(ref: TeamsConversationRef): string;
   parseConversationKey(id: string): TeamsConversationRef;
 }
@@ -63,44 +71,40 @@ interface TeamsChannel<E extends Env = Env> {
 `channels/teams.ts` is served at `/channels/teams/activities` relative to the
 `flue()` mount.
 
+`destination(activity)` derives the canonical routing identity from a verified
+activity. Activities delivered to the `activities` callback always derive a
+destination; it throws `InvalidTeamsInputError` for an activity that lacks the
+minimal structure needed to address a reply.
+
 Conversation keys are canonical identifiers, not authorization capabilities.
 
 ## Activities
 
-```ts
-type TeamsActivity =
-  | TeamsMessageActivity
-  | TeamsConversationUpdateActivity
-  | TeamsInvokeActivity
-  | TeamsMessageReactionActivity
-  | TeamsUnknownActivity;
-```
-
-Known variants use `type: 'message'`, `type: 'conversation_update'`,
-`type: 'invoke'`, or `type: 'message_reaction'`. Each known activity includes:
+The callback receives the provider-native Bot Framework `Activity`, re-exported
+from the official `botframework-schema` package:
 
 ```ts
-interface TeamsActivityEnvelope<TType extends string, TPayload> {
-  type: TType;
-  activityId?: string;
-  timestamp?: string;
-  tenantId: string;
-  serviceUrl: string;
-  destination: TeamsConversationRef;
-  sender?: TeamsAccountRef;
-  bot: TeamsAccountRef;
-  payload: TPayload;
-  raw: unknown;
-}
+import type {
+  Activity,
+  ChannelAccount,
+  ConversationAccount,
+  Entity,
+  Attachment,
+  Mention,
+  MessageReaction,
+} from '@flue/teams';
 ```
 
-Message payloads expose optional text and locale, attachments, normalized
-mentions, and optional provider value data. Conversation updates expose added
-and removed members. Invoke activities expose the provider name and value.
-Reaction activities expose added and removed reaction names.
+The activity keeps Microsoft's documented `type` values and field names. Switch
+on the native `activity.type` (`message`, `conversationUpdate`, `invoke`,
+`messageReaction`, `installationUpdate`, and others) and read native fields such
+as `activity.text`, `activity.from`, `activity.recipient`, `activity.id`,
+`activity.entities`, `activity.reactionsAdded`, and `activity.membersAdded`. See
+Microsoft's [Activity schema](https://learn.microsoft.com/azure/bot-service/rest-api/bot-framework-rest-connector-activities)
+for the full field inventory.
 
-Unsupported authenticated activity types use `type: 'unknown'` and retain the
-provider `activityType`.
+The channel does not reshape, rename, or normalize the payload; it derives only
+the routing identity below.
 
 ## Identity
 
@@ -121,18 +125,9 @@ For channel activities, `threadId` is the provider `replyToId` or the current
 activity id for a root message. The verified `serviceUrl` is retained so
 stateless applications can address the correct Bot Connector endpoint.
 
-```ts
-interface TeamsAccountRef {
-  id: string;
-  name?: string;
-  aadObjectId?: string;
-}
-
-interface TeamsMention {
-  mentioned: TeamsAccountRef;
-  text?: string;
-}
-```
+Derive a `TeamsConversationRef` from a verified activity with
+`channel.destination(activity)`. It is not a callback argument; call the helper
+inside the `activities` callback when you need to address a reply.
 
 ## Verification
 
