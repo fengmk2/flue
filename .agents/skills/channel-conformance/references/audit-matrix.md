@@ -16,6 +16,11 @@ implementations. Mark inapplicable rows with the provider-specific reason.
 - Prove a Node and Cloudflare Workers path before substantial implementation.
 - Identify whether the package needs Hono only, a Web API authentication
   library, or the provider SDK for ingress.
+- Search for authoritative provider-native types before defining local payload
+  types. Prefer an official type package, official SDK export, generated
+  schema, or well-maintained DefinitelyTyped package.
+- Record the selected type source, versioning relationship, package weight,
+  runtime impact, and whether the channel re-exports it.
 - Select an official or well-maintained cross-runtime outbound client for the
   editable example. Prefer standards-based Fetch when official SDKs are
   Node-only.
@@ -27,11 +32,19 @@ implementations. Mark inapplicable rows with the provider-specific reason.
 - At least one fixed non-root route is declared.
 - Optional handler omission has explicit route-publication semantics.
 - Callbacks use one extensible object containing Hono `c` and the typed
-  provider event or interaction.
+  provider-native payload, interaction, command, or equivalent.
+- Parsed provider payloads preserve provider field names, nesting, and
+  discriminants instead of introducing a parallel normalized model.
+- Authoritative provider types are reused and re-exported when available.
+- Local types are wire-shaped and limited to surfaces without a suitable
+  authoritative source.
 - Verification occurs before parsing-dependent application behavior.
 - Exact raw bytes are retained when authentication requires them.
-- Known variants are typed and verified unsupported variants remain
-  observable when useful.
+- Authenticated deliveries reach application code without package-owned event
+  filtering, except for mandatory protocol handshakes or responses.
+- Runtime validation is limited to authentication, transport, routing,
+  configured identity, and minimal callback safety rather than exhaustive
+  validation of the provider's typed schema.
 - Mandatory provider handshakes are internal.
 - Handler result behavior is documented and tested.
 - Provider deadlines are bounded and documented.
@@ -56,8 +69,10 @@ Cover durable public behavior in `packages/<provider>/test/`:
 - malformed request body and wrong content type;
 - body over limit, including streaming without a trusted length;
 - handshake or challenge;
-- each intentionally supported event family;
-- verified unknown event behavior;
+- representative provider payload families and discriminants;
+- authenticated payload pass-through for a future or otherwise unmodeled
+  discriminant when the public type contract permits it;
+- no silent filtering of valid provider payloads;
 - batching or multiple entries when the provider supports them;
 - handler success with no return value;
 - JSON-compatible return value;
@@ -138,6 +153,8 @@ equivalent. Follow the repository's dependency build order.
 - Inspect that the tarball contains only intended public files.
 - Confirm generated declarations expose the intended Hono generics and event
   types.
+- Confirm provider-native type dependencies and re-exports resolve in a clean
+  strict consumer without requiring an unrelated provider framework.
 - Install the tarball into a clean strict TypeScript consumer.
 - Typecheck a custom Hono environment and import the constructor at runtime.
 - Confirm no accidental `@flue/runtime` or provider SDK runtime dependency.
@@ -154,6 +171,8 @@ equivalent. Follow the repository's dependency build order.
 - Check replay timestamps when the provider supplies them.
 - Check timeout behavior and whether timed-out work can continue.
 - Check JSON recursion, unsupported values, and response header behavior.
+- Check for unnecessary field renaming, custom discriminants, normalized
+  mirrors, or filtering of authenticated provider payloads.
 - Check route method/path collisions and optional-surface publication.
 - Check that provider metadata is not documented as authorization.
 - Check fake transports fail if a real network request escapes.

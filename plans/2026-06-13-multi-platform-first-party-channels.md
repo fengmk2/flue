@@ -1039,6 +1039,37 @@ Status:
 
 - Complete.
 
+#### Native-payload audit direction — 2026-06-13
+
+The channel policy changed after reviewing the cost of Flue-owned event
+normalization. Provider-native payloads and authoritative provider types are
+now the default across first-party channels. Existing channels will be audited
+provider by provider rather than rewritten mechanically.
+
+Slack decisions:
+
+- Replace the custom normalized Events API union with Slack's official
+  `@slack/types` `SlackEvent` and re-export the provider type.
+- Change the Events API callback to `events({ c, payload })`, where `payload`
+  is the provider-native outer Events API envelope and users access
+  `payload.event`.
+- Forward every authenticated Events API delivery to application code,
+  including bot messages and message subtypes. Only package-owned protocol
+  handshakes such as URL verification bypass the callback.
+- Preserve Slack field names, nesting, and native `type` and `subtype`
+  discriminants. Remove Flue's known/unknown event registry, camel-cased event
+  payload, retry normalization, and message filtering.
+- Validate only signature, timestamp, body and encoding, configured app and
+  workspace identity, enterprise-install policy, envelope routing, and the
+  minimal structure needed to call the handler. Do not attempt exhaustive
+  runtime validation of Slack's official event union.
+- Use small provider-wire local types for interactions, commands, and the
+  Events API envelope where lightweight official types are unavailable. Do not
+  depend on the full `@slack/bolt` framework solely for its types.
+- Apply the same native-payload policy during the remaining channel audits,
+  preferring official provider packages, SDK exports, generated schemas, or
+  maintained DefinitelyTyped packages before defining Flue-owned types.
+
 Reference capability brief:
 
 - The high-level adapter documentation describes Events API messages and

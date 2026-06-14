@@ -20,7 +20,7 @@ Flue owns:
 
 - authenticated, verified HTTP ingress;
 - fixed discovered routes beneath `channels/<name>.ts`;
-- provider-native typed events and required protocol responses;
+- provider-native typed payloads and required protocol responses;
 - delivery and canonical conversation identity where the provider supplies it;
 - predictable Hono-compatible handler results.
 
@@ -35,6 +35,47 @@ The application owns:
 Do not add a universal event schema, generic outbound client, provider tool
 collection, installation framework, or long-lived transport. Conversation keys
 are identifiers, never authorization capabilities.
+
+## Preserve Provider Payloads And Types
+
+Provider-native payloads are the default channel contract. Before defining any
+event, interaction, command, or webhook types, look for an authoritative
+provider-maintained type package, provider SDK export, generated schema, or
+well-maintained DefinitelyTyped package. Prefer re-exporting those types over
+creating a parallel Flue model.
+
+Pass the provider's parsed wire object through without renaming fields, moving
+properties, filtering valid deliveries, or replacing provider discriminants
+with Flue discriminants. Name the callback property for the provider surface,
+such as `payload`, `interaction`, `command`, or another provider-native term;
+there is no universal requirement to call it `event`. When the useful provider
+object is an outer delivery envelope, prefer one unduplicated argument such as
+`{ c, payload }` and let users access its nested fields directly.
+
+Validate only what Flue needs to own the ingress boundary:
+
+- authentication and replay protection;
+- body and transport encoding;
+- mandatory protocol handshakes or responses;
+- configured application, tenant, or destination identity;
+- the minimal structure required to route and invoke application code.
+
+TypeScript types do not require exhaustive runtime schema validation after an
+authenticated provider request. Forward authenticated deliveries to
+application code unless the request is a package-owned protocol message.
+Filtering bots, message subtypes, event families, and other valid provider
+behavior is application policy.
+
+Define local wire-shaped types only when no suitable authoritative type exists,
+or when a narrow Flue-owned transport wrapper has no provider type. Keep field
+names and nesting faithful to the provider. Do not add `unknown` variants,
+normalized unions, or camel-cased mirrors merely to create consistency across
+channels.
+
+Avoid a large runtime dependency solely to acquire its types. A lightweight
+authoritative type package may be a direct dependency and re-exported from the
+channel package. If the only official types live inside a broad framework,
+define the smallest provider-faithful local wire types needed for the surface.
 
 ## Establish Eligibility Before Implementation
 
@@ -51,6 +92,7 @@ Establish:
 - whether useful ingress is stateless HTTP rather than polling or a persistent
   socket;
 - a credible Node and Cloudflare Workers implementation path;
+- the best authoritative provider-native type source and its dependency cost;
 - an outbound SDK or narrow Fetch client suitable for the editable example.
 
 Defer the provider when useful ingress requires a long-lived process, a
@@ -85,7 +127,8 @@ Before editing, write a short design brief in the active plan:
 - package, connector, file, and route names;
 - constructor inputs and optional surfaces;
 - verification strategy and runtime dependencies;
-- typed callback input and unknown-event behavior;
+- provider-native callback payload, authoritative type source, and
+  forward-compatible delivery behavior;
 - provider response and timeout behavior;
 - delivery and conversation identity;
 - example client choice and Cloudflare evidence;
@@ -97,9 +140,10 @@ Prefer fixed route suffixes such as `/webhook`, `/events`, `/interactions`, or
 another provider-native noun. Omitted optional handlers should omit their
 routes unless the provider protocol requires an always-present endpoint.
 
-Callbacks receive one object such as `{ c, event }`, preserving the Hono
-`Context` and leaving room for provider-specific additions. Use the established
-result contract unless the protocol requires stricter behavior:
+Callbacks receive one extensible object preserving the Hono `Context`, such as
+`{ c, payload }`, `{ c, interaction }`, or another provider-appropriate shape.
+Use the established result contract unless the protocol requires stricter
+behavior:
 
 - no returned value becomes an empty successful response;
 - a JSON-compatible value becomes the response JSON body;
@@ -150,7 +194,10 @@ Prove:
 - content type, malformed input, body limit, and required-header behavior;
 - handshakes, mandatory acknowledgements, response serialization, errors, and
   deadlines;
-- known and unknown event normalization;
+- provider-native payload pass-through without field renaming or valid-event
+  filtering;
+- representative provider discriminants and an authenticated future or
+  otherwise unmodeled discriminant when the type system permits it;
 - tenant/application identity checks where configuration fixes that identity;
 - delivery, batching, retry, and conversation identity semantics;
 - optional route publication;
