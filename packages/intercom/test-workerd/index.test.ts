@@ -39,13 +39,15 @@ describe('@flue/intercom workerd ingress', () => {
 		expect(response.status).toBe(200);
 		expect(changed.status).toBe(401);
 		expect(webhook).toHaveBeenCalledOnce();
-		expect(webhook.mock.calls[0]?.[0].event).toMatchObject({
+		expect(webhook.mock.calls[0]?.[0].notification).toMatchObject({
 			topic: 'conversation.ai_agent.reviewed',
-			workspaceId: 'workspace-worker',
-			notificationId: 'notif-worker-29',
-			item: {
-				type: 'conversation',
-				id: 'conversation-worker',
+			app_id: 'workspace-worker',
+			id: 'notif-worker-29',
+			data: {
+				item: {
+					type: 'conversation',
+					id: 'conversation-worker',
+				},
 			},
 		});
 	});

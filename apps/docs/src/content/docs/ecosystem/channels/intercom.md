@@ -48,28 +48,27 @@ export const client = createIntercomClient(requiredEnv('INTERCOM_ACCESS_TOKEN'),
 
 export const channel = createIntercomChannel({
   clientSecret: requiredEnv('INTERCOM_CLIENT_SECRET'),
-  workspaceId,
 
   // Path: /channels/intercom/webhook (HEAD, POST)
-  async webhook({ event }) {
-    switch (event.topic) {
+  async webhook({ notification }) {
+    switch (notification.topic) {
       case 'conversation.user.created':
       case 'conversation.user.replied': {
-        const conversationId = conversationIdFromItem(event.item);
+        const conversationId = conversationIdFromItem(notification.data.item);
         if (!conversationId) return;
 
         const conversation: IntercomConversationRef = {
-          workspaceId: event.workspaceId,
+          workspaceId: notification.app_id,
           conversationId,
         };
         await dispatch(assistant, {
           id: channel.conversationKey(conversation),
           input: {
-            type: `intercom.${event.topic}`,
-            notificationId: event.notificationId,
-            createdAt: event.createdAt,
-            deliveryAttempts: event.deliveryAttempts,
-            conversation: event.item,
+            type: `intercom.${notification.topic}`,
+            notificationId: notification.id,
+            createdAt: notification.created_at,
+            deliveryAttempts: notification.delivery_attempts,
+            conversation: notification.data.item,
           },
         });
         return;
@@ -122,15 +121,16 @@ function requiredEnv(name: string): string {
 
 The example handles two conversation topics with one grouped switch branch.
 Intercom's topic catalog is broad and API-versioned, so the channel keeps
-`event.topic` open and represents `event.item` as JSON. Validate the fields
-used by each selected topic. Verified `ping` and future topics reach the same
-callback.
+`notification.topic` open and represents `notification.data.item` as JSON.
+Validate the fields used by each selected topic. Verified `ping` and future
+topics reach the same callback.
 
-The optional `workspaceId` setting constrains signed notifications to the
-configured top-level `app_id`. Resource ids are not globally unique across
-Intercom workspaces, so the example combines workspace and conversation ids.
-Use application-owned installation state to select credentials when one
-deployment serves multiple workspaces.
+The HMAC-verified body already carries `app_id`, so the channel does not
+re-check workspace identity. Resource ids are not globally unique across
+Intercom workspaces, so the example combines `notification.app_id` and the
+conversation id into a canonical key. An app that serves multiple workspaces
+filters on `notification.app_id` itself, or uses application-owned
+installation state to select credentials.
 
 ## Official client
 
@@ -231,19 +231,20 @@ client secret. `@flue/intercom` retains and verifies those bytes before UTF-8
 decoding or JSON parsing. A changed body, missing or malformed signature, or
 wrong secret is rejected before `webhook` runs.
 
-The callback receives `{ c, event }`. The event contains:
+The callback receives `{ c, notification }`. The notification is Intercom's own
+object, with its native field names and nesting:
 
-- `topic` and workspace-scoped `workspaceId`;
-- nullable `notificationId`;
-- `createdAt`, `deliveryAttempts`, and `firstSentAt`;
-- provider-native JSON `item`;
+- `topic` and workspace-scoped `app_id`;
+- nullable `id`;
+- `created_at`, `delivery_attempts`, and `first_sent_at`;
+- provider-native JSON under `data.item`;
 - optional `self`;
-- complete parsed `raw` and exact decoded `rawBody`.
+- any unmodeled top-level fields, forwarded unchanged.
 
 The envelope is structurally checked, but item fields remain provider-native.
 Deletion, ticket, conversation-part, and future topics may have different
-shapes. Do not assume every conversation-related topic has `item.id` without
-validating that topic's documented payload.
+shapes. Do not assume every conversation-related topic has `data.item.id`
+without validating that topic's documented payload.
 
 Intercom supplies no signed timestamp or protocol replay window. Signature
 verification authenticates delivery bytes but does not provide deduplication
@@ -253,24 +254,23 @@ or freshness.
 
 Returning nothing produces an empty `200`. A JSON-compatible value becomes a
 JSON response with status `200`. A normal Hono or Fetch `Response` passes
-through unchanged.
+through unchanged. A thrown callback surfaces to the framework error handler
+as `500`.
 
-Intercom's current documentation conflicts between accepting any `2xx` and
-requiring exactly `200` to prevent redelivery. Use exactly `200` for ordinary
-acknowledgment. Return another status only when its provider behavior is
-intentional: `410` disables the subscription, while `429` throttles it.
-Ordinary failures or timeouts are retried once after approximately one minute.
+Intercom acknowledges on any `2xx`. Use `200` for ordinary acknowledgment.
+Return another status only when its provider behavior is intentional: `410`
+disables the subscription, while `429` throttles it. Ordinary failures are
+retried once after approximately one minute.
 
-Intercom allows five seconds for a delivery and gives higher priority to fast
-responses. `handlerTimeoutMs` defaults to 4500 and cannot exceed 4500. It
-covers body receipt, signature verification, parsing, and application code,
-leaving time to write the response. A timeout or thrown callback returns
-`500`. Promise timeouts cannot cancel arbitrary JavaScript work, so defer
-long-running processing beyond the acknowledgment path.
+Intercom expects a `2xx` within about five seconds and otherwise retries the
+notification once after one minute. The channel does not enforce this with a
+timer, because a promise timeout cannot cancel arbitrary JavaScript work.
+Admit durable work quickly — dispatch and return — and defer long-running
+processing beyond the acknowledgment path.
 
 Notifications can be duplicated and arrive out of order. Use a non-null
-`event.notificationId` in application-owned durable storage when duplicate
-admission is unacceptable, and consider `createdAt` when ordering matters.
+`notification.id` in application-owned durable storage when duplicate
+admission is unacceptable, and consider `created_at` when ordering matters.
 Setup or periodic pings may have a null id.
 
 The package does not install an app, perform OAuth, select permissions, create
@@ -292,9 +292,9 @@ Worker target. Cloudflare projects may use typed bindings instead of
 `process.env`; `nodejs_compat` is already part of Flue's Worker configuration.
 
 Create original synthetic notification bodies and local HMAC-SHA1 signatures.
-Exercise valid and tampered exact bytes, `HEAD`, workspace mismatch, ping,
-future topics, malformed JSON, body limits, handler results, timeout, and
-conversation-key round trips in Node and workerd.
+Exercise valid and tampered exact bytes, `HEAD`, ping, future topics,
+malformed JSON, body limits, handler results, a thrown callback surfacing as
+`500`, and conversation-key round trips in Node and workerd.
 
 For outbound tests, inject fail-closed Fetch into the actual official client,
 disable retries, assert the exact host, path, method, authorization, version,

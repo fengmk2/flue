@@ -15,27 +15,26 @@ export const client = createIntercomClient(requiredEnv('INTERCOM_ACCESS_TOKEN'),
 
 export const channel = createIntercomChannel({
 	clientSecret: requiredEnv('INTERCOM_CLIENT_SECRET'),
-	workspaceId,
 
 	// Path: /channels/intercom/webhook
-	async webhook({ event }) {
-		switch (event.topic) {
+	async webhook({ notification }) {
+		switch (notification.topic) {
 			case 'conversation.user.created':
 			case 'conversation.user.replied': {
-				const conversationId = conversationIdFromItem(event.item);
+				const conversationId = conversationIdFromItem(notification.data.item);
 				if (!conversationId) return;
 				const conversation: IntercomConversationRef = {
-					workspaceId: event.workspaceId,
+					workspaceId: notification.app_id,
 					conversationId,
 				};
 				await dispatch(assistant, {
 					id: channel.conversationKey(conversation),
 					input: {
-						type: `intercom.${event.topic}`,
-						notificationId: event.notificationId,
-						createdAt: event.createdAt,
-						deliveryAttempts: event.deliveryAttempts,
-						conversation: event.item,
+						type: `intercom.${notification.topic}`,
+						notificationId: notification.id,
+						createdAt: notification.created_at,
+						deliveryAttempts: notification.delivery_attempts,
+						conversation: notification.data.item,
 					},
 				});
 				return;

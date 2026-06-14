@@ -9,11 +9,11 @@ export const channel = createIntercomChannel({
   clientSecret: process.env.INTERCOM_CLIENT_SECRET,
 
   // Path: /channels/intercom/webhook
-  webhook({ event }) {
-    switch (event.topic) {
+  webhook({ notification }) {
+    switch (notification.topic) {
       case 'conversation.user.created':
       case 'conversation.user.replied':
-        console.log(event.workspaceId, event.item);
+        console.log(notification.app_id, notification.data.item);
         return;
       default:
         return;

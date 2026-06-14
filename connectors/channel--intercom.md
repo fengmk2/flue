@@ -23,11 +23,10 @@ project's package manager. Keep the SDK in project code; `@flue/intercom`
 verifies ingress directly with Web Crypto and does not depend on the provider
 client.
 
-Flue owns endpoint validation, exact-body HMAC verification, body limits, the
-response deadline, and the typed delivery envelope. The project owns app
-installation, OAuth, permissions, workspace token lookup, webhook
-subscriptions, deduplication, persistence, inbox policy, and every outbound
-tool.
+Flue owns endpoint validation, exact-body HMAC verification, body limits, and
+the provider-native notification payload. The project owns app installation,
+OAuth, permissions, workspace token lookup, webhook subscriptions,
+deduplication, persistence, inbox policy, and every outbound tool.
 
 ## Create the client
 
@@ -104,28 +103,27 @@ export const client = createIntercomClient(
 
 export const channel = createIntercomChannel({
   clientSecret: requiredEnv('INTERCOM_CLIENT_SECRET'),
-  workspaceId,
 
   // Path: /channels/intercom/webhook (HEAD, POST)
-  async webhook({ event }) {
-    switch (event.topic) {
+  async webhook({ notification }) {
+    switch (notification.topic) {
       case 'conversation.user.created':
       case 'conversation.user.replied': {
-        const conversationId = conversationIdFromItem(event.item);
+        const conversationId = conversationIdFromItem(notification.data.item);
         if (!conversationId) return;
 
         const conversation: IntercomConversationRef = {
-          workspaceId: event.workspaceId,
+          workspaceId: notification.app_id,
           conversationId,
         };
         await dispatch(assistant, {
           id: channel.conversationKey(conversation),
           input: {
-            type: `intercom.${event.topic}`,
-            notificationId: event.notificationId,
-            createdAt: event.createdAt,
-            deliveryAttempts: event.deliveryAttempts,
-            conversation: event.item,
+            type: `intercom.${notification.topic}`,
+            notificationId: notification.id,
+            createdAt: notification.created_at,
+            deliveryAttempts: notification.delivery_attempts,
+            conversation: notification.data.item,
           },
         });
         return;
@@ -160,9 +158,8 @@ export function retrieveConversation(ref: IntercomConversationRef) {
 
 function conversationIdFromItem(item: JsonValue): string | undefined {
   if (!item || typeof item !== 'object' || Array.isArray(item)) return undefined;
-  return typeof item.id === 'string' && item.id.length > 0
-    ? item.id
-    : undefined;
+  const id = item.id;
+  return typeof id === 'string' && id.length > 0 ? id : undefined;
 }
 
 function intercomRegion(): IntercomRegion {
@@ -184,14 +181,19 @@ check and signed `POST /webhook` for notifications. The callback runs only for
 
 `INTERCOM_CLIENT_SECRET` verifies the exact inbound body.
 `INTERCOM_ACCESS_TOKEN` authenticates project-owned REST API calls. They are
-separate credentials. `workspaceId` restricts signed deliveries to the
-configured top-level `app_id`; use application-owned installation state when
-one deployment serves multiple workspaces.
+separate credentials. The HMAC-verified body already carries `app_id`, so the
+channel does not re-check workspace identity; an app that serves multiple
+workspaces filters on `notification.app_id` itself or routes on
+application-owned installation state.
 
-Topic item schemas are broad and API-versioned. Validate the fields used by
-each selected topic. Verified `ping`, currently known topics, and future topics
-all reach the callback as open strings instead of being rejected by a closed
-union.
+The callback receives Intercom's own notification object unchanged, with its
+native field names and nesting: `notification.topic`, `notification.app_id`,
+`notification.id`, `notification.created_at`, `notification.delivery_attempts`,
+`notification.first_sent_at`, and the affected resource under
+`notification.data.item`. Topic item schemas are broad and API-versioned, so
+validate the fields used by each selected topic. Verified `ping`, currently
+known topics, and future topics all reach the callback as open strings instead
+of being rejected by a closed union.
 
 ## Wire the agent
 
@@ -236,23 +238,24 @@ Intercom computes HMAC-SHA1 over the exact request body with the developer app
 client secret. The channel verifies those bytes before UTF-8 decoding or JSON
 parsing. Intercom supplies no signed timestamp or replay window.
 
-The channel exposes nullable `notificationId`, `createdAt`,
-`deliveryAttempts`, and `firstSentAt`. Pings may have a null notification id.
-Use a non-null notification id in application-owned durable storage when
+The notification carries `notification.id`, `notification.created_at`,
+`notification.delivery_attempts`, and `notification.first_sent_at`. Pings may
+have a null `id`. Use a non-null `id` in application-owned durable storage when
 duplicate admission is unacceptable. Deliveries can be duplicated or arrive
 out of order.
 
-Returning nothing or JSON produces status `200`. A normal Hono or Fetch
-`Response` passes through. Intercom documentation is inconsistent about
-whether every `2xx` or exactly `200` acknowledges a notification, so use
-exactly `200` unless redelivery, throttling, or subscription disablement is
-intentional. In particular, `410` disables the subscription and `429`
-throttles it.
+Returning nothing produces an empty `200`; any other non-`Response` value is
+serialized with `Response.json()`. A normal Hono or Fetch `Response` passes
+through. Intercom acknowledges on any `2xx`, but `410` disables the
+subscription and `429` throttles it, so prefer `200` unless redelivery,
+throttling, or subscription disablement is intentional. A thrown callback
+surfaces to the framework error handler as `500`.
 
-The complete route has a 4500 ms deadline by default and cannot be configured
-higher. It covers body receipt, verification, parsing, and the callback.
-Timeout or application failure returns `500`; timed-out JavaScript work may
-continue, so keep webhook handling short.
+Intercom expects a `2xx` within about five seconds and otherwise retries the
+notification once after one minute. The channel does not enforce this with a
+timer (a timer cannot cancel running JavaScript). Instead, admit durable work
+quickly — dispatch and return — and rely on `notification.id` for idempotency
+rather than blocking the callback on slow operations.
 
 ## Test without Intercom
 
@@ -289,11 +292,10 @@ Cover:
 - `HEAD /channels/intercom/webhook` returning an empty `200`;
 - a valid signed notification and rejection after changing one body byte;
 - missing, malformed, and invalid signatures;
-- configured workspace mismatch;
 - `ping`, selected conversation topics, and an original future topic;
 - malformed JSON, media type, declared and streamed body limits;
 - no-value, JSON, and normal `Response` results;
-- the complete-route deadline and canonical conversation-key round trip.
+- a thrown callback surfacing as `500`, and canonical conversation-key round trip.
 
 Test the real exported client with an injected fail-closed Fetch transport in
 both Node and workerd:

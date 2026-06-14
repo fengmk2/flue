@@ -24,17 +24,8 @@ export interface ChannelRoute<E extends Env = Env> {
 export interface IntercomChannelOptions<E extends Env = Env> {
 	/** Developer app client secret used to verify exact request bytes. */
 	clientSecret: string;
-	/** Optional fixed workspace id (`app_id`). Mismatches receive `403`. */
-	workspaceId?: string;
 	/** Maximum request-body size in bytes. Defaults to 1 MiB. */
 	bodyLimit?: number;
-	/**
-	 * Complete route deadline, including body receipt, verification, parsing,
-	 * and the application callback. Defaults to and may not exceed 4500ms.
-	 *
-	 * Timed-out work may continue after the failure response.
-	 */
-	handlerTimeoutMs?: number;
 	/** Receives every verified Intercom topic, including `ping`. */
 	webhook(input: IntercomWebhookHandlerInput<E>): IntercomHandlerResult;
 }
@@ -46,32 +37,47 @@ export interface IntercomConversationRef {
 }
 
 /**
- * One verified Intercom notification.
+ * Provider-native `data` envelope of a notification.
  *
- * Topic item schemas vary by API version and some deletion or ticket topics
- * use exceptional wrappers, so applications validate the fields they consume.
+ * Intercom nests the affected resource under `data.item`; the item's shape is
+ * defined by its own `type` field and varies by API version and topic, so it
+ * is left as open JSON for the application to validate.
  */
-export interface IntercomWebhookEvent<TItem extends JsonValue = JsonValue> {
+export interface IntercomNotificationData {
+	item: JsonValue;
+	[key: string]: JsonValue;
+}
+
+/**
+ * One verified Intercom webhook notification, passed through with Intercom's
+ * own field names and nesting.
+ *
+ * Topic item schemas vary by API version, and some deletion or ticket topics
+ * use exceptional wrappers, so applications validate the fields they consume.
+ * Unmodeled top-level fields (for example `delivery_status`, `delivered_at`,
+ * or `links` on newer topics) are forwarded unchanged via the index signature.
+ */
+export interface IntercomNotification {
 	type: 'notification_event';
+	/** Provider topic string, e.g. `conversation.user.replied`. Not a closed union. */
 	topic: string;
-	/** Workspace id supplied by Intercom as top-level `app_id`. */
-	workspaceId: string;
+	/** Workspace identity Intercom supplies as top-level `app_id`. */
+	app_id: string;
 	/** Notification id for application-owned deduplication. Pings may use null. */
-	notificationId: string | null;
-	createdAt: number;
-	deliveryAttempts: number;
-	firstSentAt: number;
-	item: TItem;
+	id: string | null;
+	created_at: number;
+	delivery_attempts: number;
+	first_sent_at: number;
+	data: IntercomNotificationData;
+	/** Optional provider notification URL. */
 	self?: string | null;
-	/** Complete parsed provider envelope after signature verification. */
-	raw: JsonObject;
-	/** Exact UTF-8 request body after signature verification. */
-	rawBody: string;
+	[key: string]: JsonValue | undefined;
 }
 
 export interface IntercomWebhookHandlerInput<E extends Env = Env> {
 	c: Context<E>;
-	event: IntercomWebhookEvent;
+	/** Provider-native notification payload after exact-byte verification. */
+	notification: IntercomNotification;
 }
 
 type IntercomHandlerValue = undefined | JsonValue | Response;
@@ -96,6 +102,10 @@ export interface IntercomChannel<E extends Env = Env> {
  * Creates fixed Intercom endpoint-validation and webhook routes.
  *
  * The channel is stateless and does not deduplicate or reorder notifications.
+ * Intercom expects a `2xx` acknowledgement within five seconds and otherwise
+ * retries the notification once after a minute, so applications should admit
+ * durable work quickly and rely on `id` for idempotency rather than blocking
+ * the callback on slow operations.
  */
 export function createIntercomChannel<E extends Env = Env>(
 	options: IntercomChannelOptions<E>,
@@ -155,12 +165,6 @@ function validateOptions<E extends Env>(options: IntercomChannelOptions<E>): voi
 	}
 	if (typeof options.clientSecret !== 'string' || options.clientSecret.length === 0) {
 		throw new TypeError('createIntercomChannel() requires a non-empty clientSecret.');
-	}
-	if (
-		options.workspaceId !== undefined &&
-		(typeof options.workspaceId !== 'string' || options.workspaceId.length === 0)
-	) {
-		throw new TypeError('Intercom workspaceId must be a non-empty string when provided.');
 	}
 	if (typeof options.webhook !== 'function') {
 		throw new TypeError('createIntercomChannel() requires a webhook handler.');

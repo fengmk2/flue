@@ -33,20 +33,23 @@ describe('createIntercomChannel()', () => {
 		expect(webhook).toHaveBeenCalledOnce();
 		expect(webhook.mock.calls[0]?.[0]).toMatchObject({
 			c: expect.any(Object),
-			event: {
+			notification: {
 				type: 'notification_event',
 				topic: 'conversation.user.replied',
-				workspaceId: 'workspace-node',
-				notificationId: 'notif-node-17',
-				createdAt: 1781393001,
-				deliveryAttempts: 2,
-				firstSentAt: 1781392990,
-				item: {
-					type: 'conversation',
-					id: 'conversation-17',
-					source: { body: 'Need help' },
+				app_id: 'workspace-node',
+				id: 'notif-node-17',
+				created_at: 1781393001,
+				delivery_attempts: 2,
+				first_sent_at: 1781392990,
+				self: 'https://api.intercom.io/notifications/notif-node-17',
+				data: {
+					type: 'notification_event_data',
+					item: {
+						type: 'conversation',
+						id: 'conversation-17',
+						source: { body: 'Need help' },
+					},
 				},
-				rawBody: body,
 			},
 		});
 	});
@@ -97,8 +100,8 @@ describe('createIntercomChannel()', () => {
 
 		expect(
 			webhook.mock.calls.map(([input]) => ({
-				topic: input.event.topic,
-				id: input.event.notificationId,
+				topic: input.notification.topic,
+				id: input.notification.id,
 			})),
 		).toEqual([
 			{ topic: 'ping', id: null },
@@ -107,26 +110,6 @@ describe('createIntercomChannel()', () => {
 				id: 'notif-future-1',
 			},
 		]);
-	});
-
-	it('rejects the signed event when its workspace does not match configuration', async () => {
-		const webhook = vi.fn();
-		const app = channelApp(
-			createIntercomChannel({
-				clientSecret: CLIENT_SECRET,
-				workspaceId: 'workspace-expected',
-				webhook,
-			}),
-		);
-		const body = notification({
-			workspaceId: 'workspace-other',
-			item: { type: 'contact', id: 'contact-1' },
-		});
-
-		const response = await app.request(jsonRequest(body, await signedHeaders(body)));
-
-		expect(response.status).toBe(403);
-		expect(webhook).not.toHaveBeenCalled();
 	});
 
 	it('rejects the request when authentication or envelope input is invalid', async () => {
@@ -258,47 +241,40 @@ describe('createIntercomChannel()', () => {
 		expect(responses[2]?.headers.get('x-intercom-result')).toBe('custom');
 	});
 
-	it('fails closed when the handler returns an invalid value or throws', async () => {
-		const outcomes: Array<bigint | Error> = [1n, new Error('application handler failed')];
-		const responses: Response[] = [];
-
-		for (const [index, outcome] of outcomes.entries()) {
-			const app = channelApp(
-				createIntercomChannel({
-					clientSecret: CLIENT_SECRET,
-					webhook() {
-						if (outcome instanceof Error) throw outcome;
-						return outcome as never;
-					},
-				}),
-			);
-			const body = notification({
-				id: `notif-failure-${index}`,
-				item: { type: 'contact', id: `contact-failure-${index}` },
-			});
-			responses.push(await app.request(jsonRequest(body, await signedHeaders(body))));
-		}
-
-		expect(responses.map((response) => response.status)).toEqual([500, 500]);
-	});
-
-	it('returns a retryable failure when route work exceeds the deadline', async () => {
-		const app = channelApp(
+	it('serializes non-JSON numbers to null and surfaces thrown callbacks to the framework', async () => {
+		// A finite-coercion edge like NaN now serializes (to null) and returns 200
+		// instead of producing a clean 500; only a thrown callback fails closed.
+		const naN = channelApp(
 			createIntercomChannel({
 				clientSecret: CLIENT_SECRET,
-				handlerTimeoutMs: 60,
-				webhook: () => new Promise((resolve) => setTimeout(resolve, 40)),
+				webhook: () => Number.NaN as never,
 			}),
 		);
-		const body = notification({
-			item: { type: 'conversation', id: 'conversation-timeout' },
+		const naNBody = notification({
+			id: 'notif-nan',
+			item: { type: 'contact', id: 'contact-nan' },
 		});
+		const naNResponse = await naN.request(jsonRequest(naNBody, await signedHeaders(naNBody)));
 
-		const response = await app.request(
-			delayedStreamingRequest(body, await signedHeaders(body), 40),
+		const thrown = channelApp(
+			createIntercomChannel({
+				clientSecret: CLIENT_SECRET,
+				webhook() {
+					throw new Error('application handler failed');
+				},
+			}),
+		);
+		const thrownBody = notification({
+			id: 'notif-thrown',
+			item: { type: 'contact', id: 'contact-thrown' },
+		});
+		const thrownResponse = await thrown.request(
+			jsonRequest(thrownBody, await signedHeaders(thrownBody)),
 		);
 
-		expect(response.status).toBe(500);
+		expect(naNResponse.status).toBe(200);
+		await expect(naNResponse.json()).resolves.toBeNull();
+		expect(thrownResponse.status).toBe(500);
 	});
 
 	it('round trips canonical conversation identity when values contain delimiters', () => {
@@ -339,21 +315,7 @@ describe('createIntercomChannel()', () => {
 		expect(() =>
 			createIntercomChannel({
 				clientSecret: CLIENT_SECRET,
-				workspaceId: '',
-				webhook() {},
-			}),
-		).toThrow(TypeError);
-		expect(() =>
-			createIntercomChannel({
-				clientSecret: CLIENT_SECRET,
 				bodyLimit: 0,
-				webhook() {},
-			}),
-		).toThrow(TypeError);
-		expect(() =>
-			createIntercomChannel({
-				clientSecret: CLIENT_SECRET,
-				handlerTimeoutMs: 4_501,
 				webhook() {},
 			}),
 		).toThrow(TypeError);
@@ -415,28 +377,6 @@ function streamingRequest(body: string, headers: Record<string, string>): Reques
 			controller.enqueue(bytes.slice(0, 64));
 			controller.enqueue(bytes.slice(64));
 			controller.close();
-		},
-	});
-	return new Request('https://example.test/webhook', {
-		method: 'POST',
-		headers: { 'content-type': 'application/json', ...headers },
-		body: stream,
-		duplex: 'half',
-	} as RequestInit);
-}
-
-function delayedStreamingRequest(
-	body: string,
-	headers: Record<string, string>,
-	delayMs: number,
-): Request {
-	const bytes = encoder.encode(body);
-	const stream = new ReadableStream<Uint8Array>({
-		start(controller) {
-			setTimeout(() => {
-				controller.enqueue(bytes);
-				controller.close();
-			}, delayMs);
 		},
 	});
 	return new Request('https://example.test/webhook', {

@@ -1,13 +1,7 @@
 import type { Env, Handler } from 'hono';
-import type {
-	IntercomChannelOptions,
-	IntercomWebhookEvent,
-	JsonObject,
-	JsonValue,
-} from './index.ts';
+import type { IntercomChannelOptions, IntercomNotification, JsonObject, JsonValue } from './index.ts';
 
 const DEFAULT_BODY_LIMIT = 1024 * 1024;
-const DEFAULT_HANDLER_TIMEOUT_MS = 4_500;
 const encoder = new TextEncoder();
 const decoder = new TextDecoder('utf-8', { fatal: true });
 
@@ -19,72 +13,66 @@ export function createIntercomWebhookHandler<E extends Env>(
 	options: IntercomChannelOptions<E>,
 ): Handler<E> {
 	const bodyLimit = options.bodyLimit ?? DEFAULT_BODY_LIMIT;
-	const handlerTimeoutMs = options.handlerTimeoutMs ?? DEFAULT_HANDLER_TIMEOUT_MS;
 	if (!Number.isSafeInteger(bodyLimit) || bodyLimit <= 0) {
 		throw new TypeError('Intercom webhook bodyLimit must be a positive integer.');
 	}
-	if (
-		!Number.isSafeInteger(handlerTimeoutMs) ||
-		handlerTimeoutMs <= 0 ||
-		handlerTimeoutMs > DEFAULT_HANDLER_TIMEOUT_MS
-	) {
-		throw new TypeError('Intercom webhook handlerTimeoutMs must be between 1 and 4500.');
-	}
 	const key = importSigningKey(options.clientSecret);
 
-	return (c) =>
-		runRoute(async () => {
-			const request = c.req.raw;
-			if (!isJsonRequest(request)) return response(415);
+	return async (c) => {
+		const request = c.req.raw;
+		if (!isJsonRequest(request)) return response(415);
 
-			const contentLength = request.headers.get('content-length');
-			if (contentLength !== null && !/^\d+$/.test(contentLength)) {
-				return response(400);
-			}
-			if (contentLength !== null && Number(contentLength) > bodyLimit) {
-				return response(413);
-			}
+		const contentLength = request.headers.get('content-length');
+		if (contentLength !== null && !/^\d+$/.test(contentLength)) {
+			return response(400);
+		}
+		if (contentLength !== null && Number(contentLength) > bodyLimit) {
+			return response(413);
+		}
 
-			const signature = parseSignature(request.headers.get('x-hub-signature'));
-			if (!signature) return response(401);
+		const signature = parseSignature(request.headers.get('x-hub-signature'));
+		if (!signature) return response(401);
 
-			const body = await readBody(request, bodyLimit);
-			if (body.type === 'too-large') return response(413);
-			if (body.type === 'invalid') return response(400);
-			if (!(await verifySignature(await key, body.value, signature))) {
-				return response(401);
-			}
+		const body = await readBody(request, bodyLimit);
+		if (body.type === 'too-large') return response(413);
+		if (body.type === 'invalid') return response(400);
+		if (!(await verifySignature(await key, body.value, signature))) {
+			return response(401);
+		}
 
-			let rawBody: string;
-			try {
-				rawBody = decoder.decode(body.value);
-			} catch {
-				return response(400);
-			}
-			const raw = parseJsonObject(rawBody);
-			if (!raw) return response(400);
-			const event = normalizeEvent(raw, rawBody);
-			if (!event) return response(400);
-			if (options.workspaceId !== undefined && event.workspaceId !== options.workspaceId) {
-				return response(403);
-			}
-			return serializeHandlerResult(await options.webhook({ c, event }));
-		}, handlerTimeoutMs);
+		let rawBody: string;
+		try {
+			rawBody = decoder.decode(body.value);
+		} catch {
+			return response(400);
+		}
+		const raw = parseJsonObject(rawBody);
+		if (!raw) return response(400);
+		const notification = readNotification(raw);
+		if (!notification) return response(400);
+		return serializeHandlerResult(await options.webhook({ c, notification }));
+	};
 }
 
-function normalizeEvent(raw: JsonObject, rawBody: string): IntercomWebhookEvent | undefined {
+/**
+ * Validates only the common notification envelope Flue owns to route ingress.
+ * The full provider object is returned with Intercom's own field names; the
+ * `data.item` payload and any unmodeled top-level fields are forwarded
+ * unchanged for the application to interpret.
+ */
+function readNotification(raw: JsonObject): IntercomNotification | undefined {
 	if (raw.type !== 'notification_event') return undefined;
 	const topic = readNonEmptyString(raw, 'topic');
-	const workspaceId = readNonEmptyString(raw, 'app_id');
-	const notificationId = raw.id === null ? null : readNonEmptyString(raw, 'id');
+	const appId = readNonEmptyString(raw, 'app_id');
+	const id = raw.id === null ? null : readNonEmptyString(raw, 'id');
 	const createdAt = readNonNegativeInteger(raw, 'created_at');
 	const deliveryAttempts = readPositiveInteger(raw, 'delivery_attempts');
 	const firstSentAt = readNonNegativeInteger(raw, 'first_sent_at');
 	const data = readObject(raw, 'data');
 	if (
 		!topic ||
-		!workspaceId ||
-		(raw.id !== null && !notificationId) ||
+		!appId ||
+		(raw.id !== null && !id) ||
 		createdAt === undefined ||
 		deliveryAttempts === undefined ||
 		firstSentAt === undefined ||
@@ -97,19 +85,7 @@ function normalizeEvent(raw: JsonObject, rawBody: string): IntercomWebhookEvent 
 	if (self !== undefined && self !== null && (typeof self !== 'string' || self.length === 0)) {
 		return undefined;
 	}
-	return {
-		type: 'notification_event',
-		topic,
-		workspaceId,
-		notificationId: notificationId ?? null,
-		createdAt,
-		deliveryAttempts,
-		firstSentAt,
-		item: data.item as JsonValue,
-		...(self === undefined ? {} : { self }),
-		raw,
-		rawBody,
-	};
+	return raw as unknown as IntercomNotification;
 }
 
 async function importSigningKey(secret: string): Promise<CryptoKey> {
@@ -128,12 +104,7 @@ async function verifySignature(
 	signature: Uint8Array,
 ): Promise<boolean> {
 	try {
-		return await crypto.subtle.verify(
-			'HMAC',
-			key,
-			copyArrayBuffer(signature),
-			copyArrayBuffer(body),
-		);
+		return await crypto.subtle.verify('HMAC', key, copyArrayBuffer(signature), copyArrayBuffer(body));
 	} catch {
 		return false;
 	}
@@ -207,23 +178,9 @@ function readPositiveInteger(record: JsonObject, key: string): number | undefine
 	return value !== undefined && value > 0 ? value : undefined;
 }
 
-async function runRoute(route: () => Promise<Response>, timeoutMs: number): Promise<Response> {
-	let timeout: ReturnType<typeof setTimeout> | undefined;
-	const routePromise = Promise.resolve()
-		.then(route)
-		.catch(() => response(500));
-	const timeoutPromise = new Promise<Response>((resolve) => {
-		timeout = setTimeout(() => resolve(response(500)), timeoutMs);
-	});
-	const outcome = await Promise.race([routePromise, timeoutPromise]);
-	if (timeout !== undefined) clearTimeout(timeout);
-	return outcome;
-}
-
 function serializeHandlerResult(value: unknown): Response {
-	if (value instanceof Response) return value;
 	if (value === undefined) return response(200);
-	if (!isJsonValue(value)) return response(500);
+	if (Object.prototype.toString.call(value) === '[object Response]') return value as Response;
 	return Response.json(value);
 }
 

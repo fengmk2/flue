@@ -18,7 +18,8 @@ export {
   type IntercomChannelOptions,
   type IntercomConversationRef,
   type IntercomHandlerResult,
-  type IntercomWebhookEvent,
+  type IntercomNotification,
+  type IntercomNotificationData,
   type IntercomWebhookHandlerInput,
   type JsonObject,
   type JsonValue,
@@ -41,24 +42,19 @@ notification routes.
 ```ts
 interface IntercomChannelOptions<E extends Env = Env> {
   clientSecret: string;
-  workspaceId?: string;
   bodyLimit?: number;
-  handlerTimeoutMs?: number;
   webhook(input: IntercomWebhookHandlerInput<E>): IntercomHandlerResult;
 }
 ```
 
-| Field              | Description                                                             |
-| ------------------ | ----------------------------------------------------------------------- |
-| `clientSecret`     | Developer app client secret used for exact-body HMAC-SHA1 verification. |
-| `workspaceId`      | Optional expected top-level `app_id`. Signed mismatches receive `403`.  |
-| `bodyLimit`        | Maximum request-body size in bytes. Defaults to 1 MiB.                  |
-| `handlerTimeoutMs` | Complete route deadline. Defaults to 4500 ms and cannot exceed 4500 ms. |
-| `webhook`          | Receives every verified, structurally valid topic, including `ping`.    |
+| Field          | Description                                                             |
+| -------------- | ----------------------------------------------------------------------- |
+| `clientSecret` | Developer app client secret used for exact-body HMAC-SHA1 verification. |
+| `bodyLimit`    | Maximum request-body size in bytes. Defaults to 1 MiB.                  |
+| `webhook`      | Receives every verified, structurally valid topic, including `ping`.    |
 
 The constructor throws `TypeError` for a missing options object, empty
-`clientSecret`, empty configured `workspaceId`, missing callback, non-positive
-body limit, or timeout outside 1 through 4500 milliseconds.
+`clientSecret`, a missing callback, or a non-positive body limit.
 
 ## Routes
 
@@ -85,53 +81,61 @@ relative to the `flue()` mount.
 ```ts
 interface IntercomWebhookHandlerInput<E extends Env = Env> {
   c: Context<E>;
-  event: IntercomWebhookEvent;
+  notification: IntercomNotification;
 }
 ```
 
 `c` is the authentic Hono context. `webhook` runs only after content type, body
-limit, signature, UTF-8, JSON envelope, and optional workspace checks pass.
+limit, signature, UTF-8, and JSON envelope checks pass.
 
-## `IntercomWebhookEvent`
+## `IntercomNotification`
+
+The callback receives Intercom's own notification object unchanged, with the
+provider's native field names and nesting.
 
 ```ts
-interface IntercomWebhookEvent<TItem extends JsonValue = JsonValue> {
+interface IntercomNotificationData {
+  item: JsonValue;
+  [key: string]: JsonValue;
+}
+
+interface IntercomNotification {
   type: 'notification_event';
   topic: string;
-  workspaceId: string;
-  notificationId: string | null;
-  createdAt: number;
-  deliveryAttempts: number;
-  firstSentAt: number;
-  item: TItem;
+  app_id: string;
+  id: string | null;
+  created_at: number;
+  delivery_attempts: number;
+  first_sent_at: number;
+  data: IntercomNotificationData;
   self?: string | null;
-  raw: JsonObject;
-  rawBody: string;
+  [key: string]: JsonValue | undefined;
 }
 ```
 
-| Field              | Provider source         | Meaning                                                            |
-| ------------------ | ----------------------- | ------------------------------------------------------------------ |
-| `type`             | `type`                  | Always `notification_event` after envelope validation.             |
-| `topic`            | `topic`                 | Open provider topic string.                                        |
-| `workspaceId`      | `app_id`                | Intercom workspace identity in the notification envelope.          |
-| `notificationId`   | `id`                    | Delivery identity for application-owned dedupe; pings may be null. |
-| `createdAt`        | `created_at`            | Provider creation timestamp in Unix seconds.                       |
-| `deliveryAttempts` | `delivery_attempts`     | Positive provider attempt count.                                   |
-| `firstSentAt`      | `first_sent_at`         | First-send timestamp in Unix seconds.                              |
-| `item`             | `data.item`             | Provider-native, API-versioned JSON payload.                       |
-| `self`             | `self`                  | Optional provider notification URL.                                |
-| `raw`              | Complete request object | Parsed verified notification envelope.                             |
-| `rawBody`          | Exact request body      | UTF-8 text decoded only after exact-byte verification.             |
+| Field               | Meaning                                                                  |
+| ------------------- | ------------------------------------------------------------------------ |
+| `type`              | Always `notification_event` after envelope validation.                   |
+| `topic`             | Open provider topic string, e.g. `conversation.user.replied`.            |
+| `app_id`            | Intercom workspace identity in the notification envelope.                |
+| `id`                | Notification identity for application-owned dedupe; pings may be null.   |
+| `created_at`        | Provider creation timestamp in Unix seconds.                             |
+| `delivery_attempts` | Positive provider attempt count.                                         |
+| `first_sent_at`     | First-send timestamp in Unix seconds.                                    |
+| `data.item`         | Provider-native, API-versioned JSON payload for the affected resource.   |
+| `self`              | Optional provider notification URL.                                      |
 
 `topic` is deliberately not a closed union. Verified future topics remain
-observable. `item` is JSON-typed because Intercom's catalog is broad and
+observable. `data.item` is JSON-typed because Intercom's catalog is broad and
 versioned, deletion topics can contain minimal data, and some conversation,
 ticket, and conversation-part topics use different wrappers. Applications
 must validate the item fields consumed for each topic.
 
-The package validates the common notification envelope. It does not claim that
-every topic has a conversation id, ticket id, actor, or resource shape.
+The notification is passed through unchanged: unmodeled top-level fields (for
+example `delivery_status`, `delivered_at`, or `links` on newer topics) are
+forwarded via the index signature. The package validates the common
+notification envelope. It does not claim that every topic has a conversation
+id, ticket id, actor, or resource shape.
 
 ## Verification
 
@@ -146,9 +150,8 @@ The package verifies HMAC-SHA1 over the exact request bytes with
 Node and workerd.
 
 Unsupported media types receive `415`; malformed `Content-Length`, UTF-8,
-JSON, or envelopes receive `400`; oversized bodies receive `413`; missing,
-malformed, or changed signatures receive `401`; and a configured workspace
-mismatch receives `403`.
+JSON, or envelopes receive `400`; oversized bodies receive `413`; and missing,
+malformed, or changed signatures receive `401`.
 
 Intercom supplies no signed timestamp, nonce, or protocol replay window.
 Verification does not deduplicate notifications or establish freshness.
@@ -167,18 +170,18 @@ type IntercomHandlerResult =
 
 Returning nothing produces an empty `200`. A JSON-compatible value becomes a
 JSON response with status `200`. A normal Hono or Fetch `Response` passes
-through unchanged. A thrown callback, unsupported return value, or route
-timeout produces an empty `500`.
+through unchanged. A thrown callback or unsupported return value surfaces to
+the framework error handler as an empty `500`.
 
-Intercom documentation conflicts between acknowledging any `2xx` and
-requiring exactly `200` to avoid redelivery. Use the default exact `200` for
-ordinary acknowledgment. Custom statuses pass through, but should be used only
-with Intercom's retry semantics in mind. `410` disables a subscription and
-`429` throttles it.
+Intercom acknowledges on any `2xx`. Use `200` for ordinary acknowledgment.
+Custom statuses pass through, but should be used only with Intercom's retry
+semantics in mind: `410` disables a subscription and `429` throttles it.
 
-`handlerTimeoutMs` covers body receipt, verification, parsing, and the
-application callback. Timed-out work is not cancelled and may continue after
-the `500` response.
+Intercom expects a `2xx` within about five seconds and otherwise retries the
+notification once after one minute. The channel does not enforce this with a
+timer, because a promise timeout cannot cancel running JavaScript. Admit
+durable work quickly — dispatch and return — and rely on `id` for idempotency
+rather than blocking the callback on slow operations.
 
 ## Conversation identity
 
