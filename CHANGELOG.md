@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Fixes & Other Changes
+
+- Fixed model-invoked `task` calls being unable to pass images from the current conversation to a child agent. Flue now exposes stable attachment IDs alongside image prompts and accepts `attachments: [{ id }]`, including across session reloads while the image remains visible in the calling session's model context.
+
 ## 1.0.0-beta.1 - 2026-06-16
 
 ### Breaking Changes
