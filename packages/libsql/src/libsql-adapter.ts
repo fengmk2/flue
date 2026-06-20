@@ -41,6 +41,7 @@ import type {
 	SubmissionAttemptRef,
 	SubmissionClaimRef,
 } from '@flue/runtime/adapter';
+import type { WorkflowRunPointer } from '@flue/runtime';
 import {
 	assertSupportedFlueSchemaVersion,
 	clampLimit,
@@ -1389,16 +1390,15 @@ class LibsqlRunStore implements RunStore {
 		};
 	}
 
-	async lookupRun(runId: string): Promise<RunPointer | null> {
+	async lookupRun(runId: string): Promise<WorkflowRunPointer | null> {
 		const rows = await this.runner.query(
-			`SELECT run_id, workflow_name, status, started_at,
-			        ended_at, duration_ms, is_error
+			`SELECT run_id, workflow_name
 			 FROM flue_runs WHERE run_id = ? LIMIT 1`,
 			[runId],
 		);
 		const row = rows[0];
 		if (!row) return null;
-		return parseRunPointer(row);
+		return { runId: String(row.run_id), workflowName: String(row.workflow_name) };
 	}
 
 	async listRuns(opts: ListRunsOpts = {}): Promise<ListRunsResponse> {

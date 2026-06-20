@@ -1,6 +1,7 @@
 ---
 title: SDK overview
 description: Reference for consuming deployed Flue agents and workflows with @flue/sdk.
+lastReviewedAt: 2026-06-20
 ---
 
 The client SDK is exported from `@flue/sdk`. Use it from applications that consume deployed Flue agents and workflows.
@@ -22,7 +23,7 @@ const client = createFlueClient({
 
 - [`client.agents`](/docs/sdk/agents/) invokes persistent agent instances and streams their events.
 - [`client.workflows`](/docs/sdk/workflows/) starts workflow runs.
-- [`client.runs`](/docs/sdk/runs/) inspects and streams workflow runs.
+- [`client.runs`](/docs/sdk/runs/) inspects and streams runs exposed by their owning workflows.
 
 Deployment-wide listing (all runs, all agents) is a server-side concern: compose your own endpoints from the `listRuns()`, `getRun()`, and `listAgents()` primitives exported by `@flue/runtime`. See [compose your own admin endpoints](/docs/api/routing-api/#compose-your-own-admin-endpoints).
 

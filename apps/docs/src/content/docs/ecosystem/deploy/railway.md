@@ -1,6 +1,7 @@
 ---
 title: Deploy Agents on Railway
 description: Run the Flue Node server as a long-running Railway service.
+lastReviewedAt: 2026-06-20
 ---
 
 Flue's Node target is a long-running HTTP server, not a serverless function, so it deploys to Railway as a standard service that stays up between requests. This guide covers the Railway-specific setup; the build itself is the same `node` target described in [Deploy Agents on Node.js](/docs/ecosystem/deploy/node/) — `npx flue build --target node` produces `dist/server.mjs`, which you start with `node dist/server.mjs`.
@@ -78,7 +79,7 @@ Flue discovers `db.ts` at build time and wires it into the generated server — 
 
 Flue does not generate a `/health` route. If you set `deploy.healthcheckPath`, define the matching route in `app.ts` — otherwise Railway's check never passes and the deploy is held back. Without a health check, Railway considers the deploy ready once the process binds `PORT`.
 
-Streamed runs are served over a long-lived `GET /runs/:runId` connection (long-poll/SSE). These requests stay open for the life of the run, so favor reading the returned stream coordinates over a single blocking `?wait=result` request for agents that run long tool chains. Railway's edge proxy keeps connections open for active streaming, but treat any single attached request as bounded — move genuinely long work to a scheduled run or a separate worker.
+Exposed workflow runs are streamed through `GET /runs/:runId` with long-poll or SSE. For long-running workflows, retain the invocation's `runId` and read that resource from offset `-1` instead of holding one `?wait=result` request. Railway's edge proxy keeps active streams open, but treat any attached request as bounded; move genuinely long work to a scheduled run or separate worker. See [Workflow HTTP exports](/docs/api/workflow-api/#http-exports).
 
 ## Going further
 

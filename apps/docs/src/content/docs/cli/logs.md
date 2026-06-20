@@ -1,7 +1,7 @@
 ---
 title: flue logs
 description: Reference for reading and following workflow run events from a Flue server.
-lastReviewedAt: 2026-06-09
+lastReviewedAt: 2026-06-20
 ---
 
 ## Synopsis
@@ -18,7 +18,7 @@ Runs are workflow-only. Direct HTTP agent prompts and dispatched agent inputs ar
 
 `flue logs` reads run events via the [Durable Streams](https://durablestreams.com/) protocol. Follow mode uses long-poll live tailing with automatic reconnection and offset-based replay. Replay mode performs a single catch-up read and exits. See [Streaming Protocol](/docs/api/streaming-protocol/) for the raw HTTP contract.
 
-`flue logs` inspects runs owned by the selected running server. It cannot inspect the private child process used by `flue run`: that one-shot process streams events directly to its command and does not publish run-inspection routes.
+`flue logs` is an ordinary `/runs` client. The owning workflow must export `runs` middleware that exposes and authorizes the resource. It cannot inspect the private child process used by `flue run`: that one-shot process streams events directly to its command and does not publish run-inspection routes.
 
 ## Arguments
 
@@ -39,9 +39,9 @@ Runs are workflow-only. Direct HTTP agent prompts and dispatched agent inputs ar
 | `--limit <n>`               | Unlimited               | Limit emitted events. Applied client-side in both replay and follow modes.                                                |
 | `--format <pretty\|ndjson>` | `pretty`                | Select human-readable or line-delimited JSON output.                                                                      |
 
-When neither follow option is passed, `flue logs` reads the run record from the public `GET /runs/<runId>?meta` view to determine run status: active runs are followed, terminal runs are replayed once. The record and the event stream are served by the same public `flue()` mount behind the same middleware, so no extra mount or option is required.
+When neither follow option is passed, `flue logs` reads `GET /runs/<runId>?meta` to determine run status: active runs are followed, terminal runs are replayed once. The owning workflow's `runs` middleware authorizes both that request and event-stream reads.
 
-Run routes may expose sensitive payloads, results, errors, and events. Use repeatable `--header 'Name: value'` options to forward credentials required by application-owned middleware. Use the final HTTPS URL for remote servers to avoid credential exposure via redirects. `flue logs` rejects duplicate header names and the protocol-reserved `Accept` header.
+Run routes may expose sensitive inputs, results, errors, and events. Use repeatable `--header 'Name: value'` options to forward credentials required by the middleware. Use the final HTTPS URL for remote servers to avoid credential exposure via redirects. `flue logs` rejects duplicate header names and the protocol-reserved `Accept` header.
 
 Shell expansion keeps a literal token out of history:
 

@@ -1,6 +1,7 @@
 ---
 title: Deploy Agents on AWS
 description: Run the Flue Docker image on AWS — ECS Express Mode, EC2, or ECS on Fargate — with managed Postgres for durable state.
+lastReviewedAt: 2026-06-20
 ---
 
 Flue's Node target is a long-running HTTP server, not a function. It holds agent sessions in process and serves streamed responses over long-lived connections, so on AWS you run it as a container service that stays up — Flue owns the server, AWS owns the platform around it.
@@ -46,7 +47,7 @@ aws ecs create-express-gateway-service \
 | Health check    | `--health-check-path` is the ALB target-group path. Flue does not generate one — define `/health` in `app.ts`.                                                                                                                                                                                                                 |
 | Scaling         | `--scaling-target` sets `minTaskCount` / `maxTaskCount`; scaling tracks CPU. Keep `minTaskCount` ≥ 1 so a process is always up to hold sessions.                                                                                                                                                                               |
 
-For streamed responses, the ALB sits in front of long-lived `GET /runs/:runId` connections (long-poll / SSE). Raise the target group's idle timeout above your longest run, or have clients read stream coordinates from the `202` admission response and reconnect. Run more than one task only with shared Postgres (see [Persistence](#persistence)) — Flue's in-memory coordinator is per-process.
+For exposed workflow runs, the ALB sits in front of long-lived `GET /runs/:runId` reads (long-poll/SSE). Raise the target group's idle timeout, and retain the invocation's `runId` so clients can reconnect and resume the run stream. Run more than one task only with shared Postgres (see [Persistence](#persistence)) — Flue's in-memory coordinator is per-process. See [Workflow HTTP exports](/docs/api/workflow-api/#http-exports).
 
 ## EC2 (simplest, full control)
 

@@ -1,6 +1,7 @@
 ---
 title: Deploy Agents on Render
 description: Run the Flue Node server as a long-running Render web service.
+lastReviewedAt: 2026-06-20
 ---
 
 Flue's Node target is a long-running HTTP server, not a serverless function, so it deploys to Render as a web service that stays up between requests. This guide covers the Render-specific setup; the build itself is the same `node` target described in [Deploy Agents on Node.js](/docs/ecosystem/deploy/node/) — `npx flue build --target node` produces `dist/server.mjs`, which you start with `node dist/server.mjs`.
@@ -100,7 +101,7 @@ Flue discovers `db.ts` at build time and wires it into the generated server — 
 
 Flue does not generate a `/health` route. If you set `healthCheckPath`, define the matching route in `app.ts` — otherwise the check never passes and Render holds the deploy back. Drop `healthCheckPath` if you don't want a health gate.
 
-Streamed runs are served over a long-lived `GET /runs/:runId` connection (long-poll/SSE). Render imposes no fixed idle timeout on a web service connection and allows a request to run up to 100 minutes, so a single streaming connection is well within bounds. The real risk to a long-lived stream is instance replacement: Render may replace an instance during a deploy or routine maintenance, and terminating the old instance closes every connection to it. For agents that run long tool chains, prefer reading the run's stream coordinates and reconnecting to `/runs/:runId` over holding one blocking `?wait=result` request, so a client can resume after a reconnect. The server's `SIGTERM` shutdown delay (default 30s, raise via `maxShutdownDelaySeconds` up to 300s) governs how long in-flight work has to finish during a graceful shutdown.
+Exposed workflow runs are served through long-lived `GET /runs/:runId` reads (long-poll/SSE). Render imposes no fixed idle timeout and allows a request to run up to 100 minutes. Instance replacement can still close connections, so retain the invocation's `runId` and resume the run stream rather than relying on one blocking `?wait=result` request. The server's `SIGTERM` shutdown delay (default 30s, up to 300s via `maxShutdownDelaySeconds`) governs graceful shutdown. See [Workflow HTTP exports](/docs/api/workflow-api/#http-exports).
 
 ## Going further
 

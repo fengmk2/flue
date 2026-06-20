@@ -158,9 +158,9 @@ sdk/events -- Events and records
 sdk/overview -- SDK overview
   Reference for consuming deployed Flue agents and workflows with @flue/sdk.
 sdk/runs -- client.runs
-  Inspect and stream workflow runs.
+  Inspect and stream HTTP-exposed workflow runs.
 sdk/workflows -- client.workflows
-  Start workflow runs and receive their run ID and stream URL.
+  Start workflow runs and receive their run ID.
 ```
 
 <!-- flue-docs-catalog:end -->

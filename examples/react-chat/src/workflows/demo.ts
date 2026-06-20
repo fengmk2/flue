@@ -1,7 +1,13 @@
-import { defineAgent, defineWorkflow, type WorkflowRouteHandler } from '@flue/runtime';
+import {
+	defineAgent,
+	defineWorkflow,
+	type WorkflowRouteHandler,
+	type WorkflowRunsHandler,
+} from '@flue/runtime';
 import * as v from 'valibot';
 
 export const route: WorkflowRouteHandler = async (_c, next) => next();
+export const runs: WorkflowRunsHandler = async (_c, next) => next();
 
 const agent = defineAgent(() => ({ model: false }));
 export default defineWorkflow({

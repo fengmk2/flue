@@ -1,6 +1,7 @@
 ---
 title: Deploy Agents on Fly.io
 description: Deploy Flue agents to Fly.io as a long-running Docker app on Fly Machines.
+lastReviewedAt: 2026-06-20
 ---
 
 A Flue server is a long-running HTTP service, not a serverless function, so deploy it to Fly Machines that stay up rather than scaling to zero between requests. `fly launch` builds the [Flue Docker image](/docs/ecosystem/deploy/docker/) and runs it on Machines, which suit a stateful, always-on server well.
@@ -85,7 +86,7 @@ Flue discovers `db.ts` at build time and wires it into the generated server. The
 
 Flue does not generate a `/health` route — define one in `app.ts` for the `[[http_service.checks]]` path above, or drop the check. Fly's HTTP checks expect a 2xx and do not follow redirects, so with `force_https = true` either run the check over `https` or add `X-Forwarded-Proto = "https"` to its headers.
 
-Streamed responses use a long-lived `GET /runs/:runId` (long-poll/SSE). Keep at least one Machine running so these connections are not cut by auto-stop, and give the agent's work generous timeouts; for prompts that run long tool chains, return the run's stream coordinates and read from `/runs/:runId` instead of holding a single blocking request.
+Exposed workflow runs use long-lived `GET /runs/:runId` reads (long-poll/SSE). Keep at least one Machine running so auto-stop does not cut these connections. For long-running workflows, retain the invocation's `runId` and read the run from offset `-1` instead of holding one blocking request. See [Workflow HTTP exports](/docs/api/workflow-api/#http-exports).
 
 ## Going further
 

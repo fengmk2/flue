@@ -10,6 +10,7 @@
 - **Workflow and delegation types are simplified.** `ExtractedWorkflow` and `InlineWorkflow` are removed; both `defineWorkflow()` forms return specialized `WorkflowDefinition` types. `TaskDepthExceededError` and `task_depth_exceeded` are renamed to `DelegationDepthExceededError` and `delegation_depth_exceeded` because the limit applies across nested Tasks and Actions.
 - **Runtime context types now describe their actual roles.** `FlueContext` is renamed to `FlueEventContext` for `observe()` subscribers, and `AgentCreateContext` is renamed to `AgentInitializerContext`.
 - **Session persistence moves to version 7.** Custom `SessionStore` adapters must replace `taskSessions` with `childSessions: ChildSessionRef[]`, using discriminated Task and Action references. Existing version 6 session data is unsupported and must be cleared or migrated.
+- **Workflow HTTP exposure and receipts are simplified.** A workflow's `route` export now controls only `POST /workflows/:name`; export `runs: WorkflowRunsHandler` separately to expose and authorize HTTP operations on its existing run resources. Workflow HTTP and SDK admission receipts are now `{ runId }`, and waited results are `{ runId, result }`; workflow responses no longer include stream coordinates or `Location` / `Stream-Next-Offset` headers. Agent receipts are unchanged.
 
 ### New Features
 

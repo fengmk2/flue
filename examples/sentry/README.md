@@ -202,7 +202,9 @@ flue logs run_01HX...
 ```
 
 The CLI streams the full event log of that run — including the
-`run_end` event that triggered the Sentry capture.
+`run_end` event that triggered the Sentry capture. Each example workflow intentionally
+exports an allow-through `runs` handler so the CLI can read these runs; production
+projects should protect run access with authentication.
 
 ## Adapting this to your project
 

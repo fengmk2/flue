@@ -1,6 +1,7 @@
 ---
 title: Cloudflare
 description: Understand the Cloudflare-specific runtime behavior and APIs for Flue applications.
+lastReviewedAt: 2026-06-20
 ---
 
 The Cloudflare target builds your agents and workflows for the Cloudflare platform. Generated agents and workflows run inside Durable Objects, using the Agents SDK, Workers AI, Cloudflare Sandbox, Cloudflare Shell, and other Worker primitives where appropriate. Durable Objects give each agent instance its own persistent state, durable execution, and global addressability out of the box.
@@ -239,7 +240,7 @@ export default {
 
 Use `app.ts` for custom HTTP routes and middleware. `cloudflare.ts` must not define a default `fetch` handler because Flue keeps HTTP composition in `app.ts`.
 
-Use `cloudflare.ts` for Worker-level events such as inbound email, queues, or cron handlers that are not owned by a specific generated agent or workflow class. To start a Flue Workflow from one of these handlers, import its discovered default export and call `invoke(workflow, { input })`. Ambient invocation creates a real Workflow Run, does not require an exported HTTP `route`, and bypasses route middleware. Do not call the Workflow's Action or `run(...)` callback directly. See [Schedules](/docs/guide/schedules/) for a Cron Trigger example and [Workflows](/docs/guide/workflows/#application-code) for invocation semantics.
+Use `cloudflare.ts` for Worker-level events such as inbound email, queues, or cron handlers that are not owned by a specific generated agent or workflow class. To start a Flue Workflow from one of these handlers, import its discovered default export and call `invoke(workflow, { input })`. Ambient invocation creates a real Workflow Run, does not require an exported HTTP `route`, and bypasses HTTP middleware. Do not call the Workflow's Action or `run(...)` callback directly. See [Schedules](/docs/guide/schedules/) for a Cron Trigger example and [Workflows](/docs/guide/workflows/#application-code) for invocation semantics.
 
 ## Reference
 

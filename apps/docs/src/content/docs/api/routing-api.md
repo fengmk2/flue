@@ -1,7 +1,7 @@
 ---
 title: Routing API
 description: Compose Flue routes in an authored application entrypoint.
-lastReviewedAt: 2026-06-02
+lastReviewedAt: 2026-06-20
 ---
 
 Import application composition APIs from `@flue/runtime/routing`.
@@ -53,15 +53,17 @@ Creates a mountable Hono sub-app for Flue's public HTTP API. Routes are relative
 | `HEAD /runs/:runId`      | Return run stream metadata (tail offset, closed status).                                 |
 | `* /channels/:name/*`    | Serve method- and suffix-specific discovered channel handlers.                           |
 
-Agent and workflow invocation routes are available only when the corresponding module exports a `route` handler. Discovered channel files export a named `channel` binding whose provider-declared routes are always mounted beneath `/channels/<filename>`. Run routes inspect workflow runs only and are available beneath `flue()` after a run is admitted, regardless of whether that workflow exposes HTTP invocation. They may expose inputs, results, errors, and events. Applications publishing them should authorize access to the selected run. Direct agent prompts and dispatched agent inputs are not runs.
+Agent routes and workflow invocation routes are available only when the corresponding module exports `route`. A workflow's existing run resources are available only when its module separately exports `runs`. Discovered channel files export a named `channel` binding whose provider-declared routes are always mounted beneath `/channels/<filename>`. Direct agent prompts and dispatched agent inputs are not runs.
 
 `POST /agents/:name/:id` accepts a JSON body of `{ message, images? }`: a required `message` string and an optional `images` array of `{ type: 'image', data, mimeType }` attachments, where `data` is base64-encoded image content (capped at 14 MiB of base64 characters per image) for vision-capable models. `POST /workflows/:name` accepts the workflow input as its JSON body. The exact request schemas are published at `GET /openapi.json`.
 
-Both invocation routes share one flat response convention. `POST /agents/:name/:id` returns `202 { streamUrl, offset }` after admission, or `200 { result, streamUrl, offset }` with `?wait=result`. `POST /workflows/:name` returns `202 { runId, streamUrl, offset }` after admission, or `200 { result, runId, streamUrl, offset }` with `?wait=result`. `streamUrl` and `offset` are server-provided stream coordinates: reading `streamUrl` from `offset` yields the admitted work's events (the whole run for workflows; that prompt's events for agents). Treat `offset` as an opaque token — do not construct one. `202` responses also mirror the coordinates as `Location` and `Stream-Next-Offset` headers, matching Durable Streams stream creation. Any `?wait` value other than `result` is rejected with `400 invalid_request` on both routes.
+`POST /agents/:name/:id` returns `202 { streamUrl, offset, submissionId }` after admission, or `200 { result, streamUrl, offset, submissionId }` with `?wait=result`; agent response headers and stream-coordinate behavior are unchanged. `POST /workflows/:name` returns `202 { runId }`, or `200 { runId, result }` with `?wait=result`. Workflow invocation responses do not include `Location` or `Stream-Next-Offset` headers. Any `?wait` value other than `result` is rejected with `400 invalid_request` on both routes.
 
 For agent prompts, waiting with `?wait=result` is best-effort and scoped to the process that admitted the prompt. The prompt itself is a durable submission either way: if the admitting process is interrupted before settlement, the waiting connection is lost while recovery settles the submission in the background — the outcome then appears in session history and as a `submission_settled` event on the agent's stream instead of answering the original request. A caller that must observe the outcome across interruptions should read the agent stream from the returned coordinates rather than relying on the synchronous response.
 
-`GET /runs/:runId?meta` selects the run-record view of the run resource: the persisted record (`runId`, `workflowName`, `status`, timestamps, `input`, `result`, `error`) as a plain JSON object. The `?meta` response carries no Durable Streams headers, and stream parameters (`offset`, `live`) are ignored on this view. Both views of `/runs/:runId` are guarded by the same workflow `route` middleware: if a caller can read the run's event stream, it can read the run record.
+`GET /runs/:runId?meta` selects the persisted run-record view (`runId`, `workflowName`, `status`, timestamps, `input`, `result`, `error`) as plain JSON. The `?meta` response carries no Durable Streams headers, and stream parameters (`offset`, `live`) are ignored.
+
+For an existing run, Flue invokes its owning workflow's `runs` middleware with an ordinary Hono context before handling `GET`, `HEAD`, `?meta`, unsupported methods, or future run methods. Middleware may deny the request or call `next()`. If the workflow has no `runs` export, Flue returns a generic `404` indistinguishable from an unknown or removed run. Unsupported methods become `405` only after the run is exposed and authorized.
 
 ## Compose your own admin endpoints
 

@@ -1,6 +1,7 @@
 ---
 title: Deploy Agents with Docker
 description: Package the Flue Node.js build as a portable container image.
+lastReviewedAt: 2026-06-20
 ---
 
 Package the Flue Node.js build as a container image that runs on any platform that takes one. For the underlying build and runtime behavior, see [Deploy Agents on Node.js](/docs/ecosystem/deploy/node/).
@@ -73,7 +74,7 @@ Flue discovers `db.ts` at build time and wires it into the generated server. Pro
 
 Flue does not generate a health endpoint. If your platform health-checks the container, define the route it expects (commonly `/health`) in your `app.ts`.
 
-Streamed agent and workflow responses use long-lived `GET /runs/:runId` connections (long-poll / SSE). Make sure the platform's request and idle-connection timeouts allow them, or have clients read stream coordinates from the `202` admission response and reconnect.
+Exposed workflow runs use long-lived `GET /runs/:runId` reads (long-poll/SSE). Ensure the platform's request and idle-connection timeouts allow them. Workflow admission returns `runId`; clients can reconnect to that run and resume with a stream offset. Agent stream receipts are unchanged. See [Streaming Protocol](/docs/api/streaming-protocol/).
 
 ## References
 

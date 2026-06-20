@@ -1,6 +1,7 @@
 ---
 title: Streaming Protocol
 description: Reference for reading Flue agent and workflow event streams over Durable Streams.
+lastReviewedAt: 2026-06-20
 ---
 
 Flue implements the [Durable Streams](https://durablestreams.com) read protocol for agent-instance and workflow-run events. This page is for raw HTTP consumers. SDK users usually use `client.agents.stream()`, `client.runs.stream()`, or `client.runs.events()` instead.
@@ -14,7 +15,7 @@ Flue implements the [Durable Streams](https://durablestreams.com) read protocol 
 | `GET /runs/:runId`       | Read one workflow-run stream.              |
 | `HEAD /runs/:runId`      | Read workflow-run metadata without a body. |
 
-Agent streams exist after the first admitted prompt for that instance. Workflow-run streams exist after workflow admission. Missing streams return `404`.
+Agent streams exist after the first admitted prompt for that instance. Workflow-run streams are readable only when the owning workflow exports `runs` middleware and it authorizes the request. Unknown, removed, and unexposed runs all return `404`.
 
 ## Read modes
 
@@ -45,7 +46,7 @@ Offsets are opaque Durable Streams coordinates. Flue currently formats them as t
 | `now`           | Read from the current tail. In live mode, wait for events appended after the current tail. |
 | Returned offset | Resume strictly after that event.                                                          |
 
-The SDK exposes a resume offset as `stream.offset`. It is batch-granular: it advances only after every event in the fetched batch has been delivered. Resuming from a checkpoint does not skip undelivered events, though it can re-deliver an in-flight batch. For per-event checkpoints on workflow-run streams use the event's `eventIndex` (there it equals the stream sequence; agent streams restart `eventIndex` per prompt, so it is not an offset there); `flue logs --format ndjson` prints a per-event `offset` derived from it. `agents.send()` and `agents.prompt()` return an offset captured before that prompt is admitted, so reading from that offset yields that prompt's events. `workflows.invoke()` returns the run ID plus a server-provided `streamUrl` and an `offset` captured at admission, so reading from that offset yields the run's events from the start.
+The SDK exposes a resume offset as `stream.offset`. It is batch-granular: it advances only after every event in the fetched batch has been delivered. Resuming from a checkpoint does not skip undelivered events, though it can re-deliver an in-flight batch. For per-event checkpoints on workflow-run streams use the event's `eventIndex` (there it equals the stream sequence; agent streams restart `eventIndex` per prompt, so it is not an offset there); `flue logs --format ndjson` prints a per-event `offset` derived from it. `agents.send()` and `agents.prompt()` return an offset captured before that prompt is admitted, so reading from that offset yields that prompt's events. Workflow invocation returns only `runId`; start an exposed run stream from `-1` to read its history.
 
 ## Recent history with `tail`
 

@@ -1,7 +1,7 @@
 ---
 title: CLI
 description: Use the Flue CLI to configure, develop, exercise, inspect, and build an application.
-lastReviewedAt: 2026-06-13
+lastReviewedAt: 2026-06-20
 ---
 
 Install `@flue/cli` as a development dependency, then invoke the `flue` executable through your package manager:
@@ -63,7 +63,7 @@ Use `flue logs` to replay or follow events for a workflow run owned by a running
 npx flue logs run_01JX...
 ```
 
-Runs are workflow-only. Direct agent prompts and dispatched agent inputs are persistent session interactions, not runs. A one-shot `flue run` process streams its own events and cannot be inspected later with `flue logs`. See [`flue logs`](/docs/cli/logs/) for server selection, authentication headers, filtering, and output formats.
+Runs are workflow-only. The owning workflow must expose its run resources; pass any required credentials with `--header`. Direct agent prompts and dispatched agent inputs are persistent session interactions, not runs. A one-shot `flue run` process streams its own events and cannot be inspected later with `flue logs`. See [`flue logs`](/docs/cli/logs/) for details.
 
 ## Build and deploy
 

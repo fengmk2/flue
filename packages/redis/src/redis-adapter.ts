@@ -30,6 +30,7 @@ import type {
 	SubmissionAttemptRef,
 	SubmissionClaimRef,
 } from '@flue/runtime/adapter';
+import type { WorkflowRunPointer } from '@flue/runtime';
 import {
 	assertSupportedFlueSchemaVersion,
 	clampLimit,
@@ -1277,9 +1278,14 @@ class RedisRunStore {
 		return row.runId ? parseRun(row) : null;
 	}
 
-	async lookupRun(runId: string): Promise<RunPointer | null> {
-		const row = await this.getRun(runId);
-		return row ? pointer(row) : null;
+	async lookupRun(runId: string): Promise<WorkflowRunPointer | null> {
+		const values = await this.backend.command('HMGET', [
+			this.backend.keys.run(runId),
+			'runId',
+			'workflowName',
+		]);
+		if (!Array.isArray(values) || values[0] == null || values[1] == null) return null;
+		return { runId: String(values[0]), workflowName: String(values[1]) };
 	}
 
 	async listRuns(opts: ListRunsOpts = {}): Promise<ListRunsResponse> {

@@ -1,7 +1,7 @@
 ---
 title: Routing
 description: Compose Flue with application routes, middleware, and custom HTTP ingress.
-lastReviewedAt: 2026-05-29
+lastReviewedAt: 2026-06-20
 ---
 
 `src/app.ts` is an optional entrypoint for providing your own HTTP application in a Flue project. Add this file when your application needs authentication, health checks, route prefixes, or custom routes alongside the agents, workflows, and channels exposed by Flue.
@@ -33,14 +33,13 @@ app.get('/health', (c) => c.json({ ok: true }));
 
 app.use('/agents/*', requireUser);
 app.use('/workflows/*', requireUser);
-app.use('/runs/*', requireUser);
 app.use('/channels/*', requireUser);
 app.route('/', flue());
 
 export default app;
 ```
 
-In this application, `/health` is an application-owned route, while `flue()` serves exposed agents, exposed workflows, workflow run routes, and discovered channels. The middleware protects those Flue route families before requests reach their handlers.
+In this application, `/health` is application-owned, while `flue()` serves exposed agents, workflow invocation routes, and discovered channels. Workflow modules authorize their own optional run resources with `runs` middleware.
 
 Use broader middleware for requirements shared by a group of routes, such as requiring an authenticated user. When access depends on a specific selected resource, apply that check as well: for example, an agent route should verify that the caller may access the agent instance named by its `id`, and an application that publishes workflow run reads should authorize access to the selected run.
 
@@ -96,9 +95,9 @@ app.route('/api', flue());
 export default app;
 ```
 
-With this mount, an exposed `support-assistant` agent is available beneath `/api/agents/support-assistant/:id`, an exposed `summarize-ticket` workflow is available beneath `/api/workflows/summarize-ticket`, and `channels/github.ts` publishes its webhook beneath `/api/channels/github/webhook`. Workflow run routes and Flue's OpenAPI output are mounted beneath the same prefix. SDK consumers should include the mount pathname in `baseUrl`, such as `createFlueClient({ baseUrl: 'https://example.com/api' })`.
+With this mount, an exposed `support-assistant` agent is available beneath `/api/agents/support-assistant/:id`, an exposed `summarize-ticket` workflow is available beneath `/api/workflows/summarize-ticket`, and `channels/github.ts` publishes its webhook beneath `/api/channels/github/webhook`. Optional workflow run resources and Flue's OpenAPI output use the same prefix. SDK consumers should include the mount pathname in `baseUrl`, such as `createFlueClient({ baseUrl: 'https://example.com/api' })`.
 
-Apply middleware to the mounted paths your application publishes, such as `/api/agents/*`, `/api/workflows/*`, `/api/runs/*`, and `/api/channels/*` in this example.
+Apply application-wide middleware to the mounted paths you publish. Per-workflow `runs` middleware remains responsible for exposing and authorizing each run resource.
 
 Discovered channel filenames and provider route suffixes are fixed beneath the
 `flue()` mount. An authored `app.ts` can prefix all Flue routes but cannot
@@ -113,11 +112,26 @@ Mounting `flue()` does not make every discovered agent or workflow directly invo
 | ----------------- | --------------------------------------------------------------------------------------------------------------- |
 | Agent `route`     | HTTP prompts at `POST /agents/:name/:id` and event streaming at `GET /agents/:name/:id` beneath the mount path. |
 | Workflow `route`  | HTTP invocation at `POST /workflows/:name` beneath the mount path.                                              |
+| Workflow `runs`   | Authorized HTTP operations on existing runs owned by that workflow beneath `/runs/:runId`.                     |
 | Channel `channel` | Provider-declared HTTP surfaces beneath `/channels/:name/<suffix>`.                                             |
 
-Run reads at `GET /runs/:runId` (event streaming, and the run record via `?meta`) are not gated by any module export: the route is registered unconditionally beneath the mount path and serves any admitted workflow run, however it was invoked. When the owning workflow exports `route` middleware, both views run that middleware before disclosing whether the run exists. Unknown run IDs return `404`.
+`route` controls workflow invocation only. Export `runs` separately when HTTP clients should inspect runs, including runs created by ambient `invoke()`, schedules, or other non-HTTP callers:
 
-If you want run existence to stay undisclosed to unauthorized callers, have your `route` middleware reject with the same `404` shape an unknown run produces — a `401`/`403` from per-workflow middleware tells the caller a run with that ID exists. For policies that should cover every run regardless of workflow (a shared auth gate, rate limiting), apply ordinary Hono middleware in your `app.ts` above the mounted Flue app — your application owns the request path, so `app.use('/api/runs/*', ...)` runs before any Flue routing.
+```ts title="src/workflows/summarize-ticket.ts"
+import type { WorkflowRunsHandler } from '@flue/runtime';
+import { verifyRunToken } from '../auth.ts';
+
+export const runs: WorkflowRunsHandler = async (c, next) => {
+  const token = c.req.header('authorization');
+  if (!(await verifyRunToken(token))) {
+    return c.json({ error: 'Not found' }, 404);
+  }
+
+  await next();
+};
+```
+
+`runs` receives an ordinary Hono context and may deny or call `next()`. It applies to `GET`, `HEAD`, `?meta`, unsupported methods, and future run methods. Without it, existing runs return the same generic `404` as unknown or removed runs. A request reaches `405` for an unsupported method only after the run is exposed and authorized. These exports do not affect ambient `invoke()`, `listRuns()`, `getRun()`, schedules, or `flue run`.
 
 An agent used only through application-owned `dispatch(...)` calls does not need a public transport export.
 

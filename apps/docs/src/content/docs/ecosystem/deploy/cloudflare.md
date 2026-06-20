@@ -1,6 +1,7 @@
 ---
 title: Deploy to Cloudflare
 description: Build and deploy Flue agents on Cloudflare Workers.
+lastReviewedAt: 2026-06-20
 ---
 
 Build and deploy Flue agents on Cloudflare Workers. This guide walks you through the different kinds of agents you can build — from simple prompt-and-response endpoints to full coding agents backed by persistent storage and remote sandboxes.
@@ -494,7 +495,7 @@ Cloudflare direct prompts and dispatched inputs enter one SQLite-backed submissi
 
 Before provider processing starts, Flue persists canonical submitted input and records an operational input-application boundary. After interruption, Flue retries only when it can prove provider work did not cross that boundary. If replay safety is uncertain, it appends a framework interruption advisory to canonical session history and terminalizes the operational submission instead of risking duplicate model work or external effects. Later prompts to the same agent instance can see that factual advisory.
 
-All Cloudflare workflow invocations use the same Fiber-backed durable admission path. The transport controls only how the initiating caller observes the admitted run: immediate `202` or a synchronous result. Run events are durably stored and can be streamed independently via `GET /runs/:runId`.
+All Cloudflare workflow invocations use the same Fiber-backed durable admission path. The transport controls only whether the caller receives an immediate `{ runId }` receipt or waits for `{ runId, result }`. Run events are durably stored and can be streamed through `GET /runs/:runId` when the workflow exports `runs` middleware.
 
 External effects remain application-owned. An interruption can leave the outcome of already-started model or tool activity uncertain, and an explicit caller retry can repeat effects. For dispatched agent work, correlate effects with `dispatchId` or an application-level idempotency key. Direct attached prompts do not expose a public receipt or replay API.
 

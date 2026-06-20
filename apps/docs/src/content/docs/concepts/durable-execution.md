@@ -1,6 +1,7 @@
 ---
 title: Durable Agents
 description: Understand how Flue agents and workflows handle server restarts, interrupted connections, and other disruptions.
+lastReviewedAt: 2026-06-20
 ---
 
 Durable execution is about recovering safely when running work is disrupted by a server restart, deployment, lost connection, or unexpected failure. Flue handles that recovery differently for continuing agents and finite workflows.
@@ -110,6 +111,6 @@ If a job requires checkpointed steps that resume automatically after disruption,
 
 ### Inspect workflow runs
 
-Use a workflow's `runId` to inspect its recorded outcome and events independently of the connection that started it. This is useful for debugging, live progress, and operational tooling.
+Use a workflow's `runId` to inspect its recorded outcome and events independently of the connection that started it. HTTP and SDK inspection requires the owning workflow to expose and authorize its run resources; server-side inspection primitives are unaffected. This is useful for debugging, live progress, and operational tooling.
 
 Agent prompts and dispatched agent input do not create workflow runs. Use agent operation observation for continuing agents, and reserve workflow history and `flue logs` for workflow invocations. See [Workflows](/docs/guide/workflows/) for authoring and run inspection, and [Observability](/docs/guide/observability/) for runtime events and telemetry.

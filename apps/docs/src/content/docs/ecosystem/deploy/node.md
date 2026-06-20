@@ -1,6 +1,7 @@
 ---
 title: Deploy Agents on Node.js
 description: Build and deploy Flue agents as a Node.js server.
+lastReviewedAt: 2026-06-20
 ---
 
 Build and deploy Flue agents as a Node.js server. This guide walks you through creating your first agent, running it locally, and deploying it anywhere you can run Node.js — a VPS, Docker, Railway, Fly.io, or any cloud platform.
@@ -273,9 +274,9 @@ The default root-mounted Flue application can expose:
 - `POST /agents/:name/:id` — send an attached prompt to an agent module that exports `route`;
 - `GET /agents/:name/:id` — stream agent events via the Durable Streams protocol;
 - `POST /workflows/:name` — invoke a workflow module that exports `route`;
-- `GET /runs/:runId` — stream workflow-run events via the Durable Streams protocol (`?meta` reads the run record).
+- `GET /runs/:runId` — stream or inspect runs whose owning workflow exports `runs` middleware (`?meta` reads the run record).
 
-Flue does not add a health endpoint or deployment-inspection routes by default. Define a host-required health route in `app.ts`, and [compose your own admin endpoints](/docs/api/routing-api/#compose-your-own-admin-endpoints) behind operator authorization if deployment-wide inspection is required. Agent prompt routes advance sessions without creating runs; workflow invocations are the executions represented by workflow run IDs and inspectable through run tooling.
+Flue does not add a health endpoint or deployment-wide inspection routes by default. Define a host-required health route in `app.ts`, expose per-workflow run resources with `runs` middleware, and [compose your own admin endpoints](/docs/api/routing-api/#compose-your-own-admin-endpoints) behind operator authorization when listing is required. Agent prompt routes advance sessions without creating runs.
 
 ### Choosing a sandbox strategy
 

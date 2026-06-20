@@ -1,9 +1,10 @@
 ---
 title: client.runs
-description: Inspect and stream workflow runs.
+description: Inspect and stream HTTP-exposed workflow runs.
+lastReviewedAt: 2026-06-20
 ---
 
-Run APIs inspect workflow runs only. Direct agent prompts and dispatched agent inputs are not runs.
+Run APIs inspect workflow runs only. They require the owning workflow to export `runs` middleware that authorizes the request; otherwise the server returns the same `404` as for an unknown run. Direct agent prompts and dispatched agent inputs are not runs.
 
 ## `client.runs.get(...)`
 
@@ -11,7 +12,7 @@ Run APIs inspect workflow runs only. Direct agent prompts and dispatched agent i
 get(runId: string): Promise<RunRecord>;
 ```
 
-Retrieves one workflow-run record via the public `GET /runs/:runId?meta` view. The record is guarded by the same workflow `route` middleware as the run's event stream.
+Retrieves one workflow-run record via `GET /runs/:runId?meta`. The owning workflow's `runs` middleware authorizes the request.
 
 ## `client.runs.events(...)`
 

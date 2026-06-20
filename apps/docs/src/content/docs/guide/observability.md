@@ -1,7 +1,7 @@
 ---
 title: Observability
 description: Inspect workflow runs, monitor agent activity, and export telemetry from your application.
-lastReviewedAt: 2026-06-15
+lastReviewedAt: 2026-06-20
 ---
 
 Observability helps you understand whether Flue work completed, failed, became slow, or used more model resources than expected. Inspect workflow run history for bounded jobs, and use `observe(...)` to monitor workflows and continuing agents across your application.
@@ -41,13 +41,13 @@ export default defineWorkflow({
 
 `log.info(...)`, `log.warn(...)`, and `log.error(...)` accept structured attributes. Use attributes for values that you may later search, aggregate, or forward to a monitoring system. See [`ActionContext`](/docs/api/action-api/#actioncontext) for the Action logging contract.
 
-When a workflow invoked through a running application reports its `runId`, use that identifier to inspect the workflow run from the command line:
+When a workflow invoked through a running application reports its `runId`, and its module exposes `runs` middleware, use that identifier to inspect the run from the command line:
 
 ```bash
 pnpm exec flue logs <runId> --server http://localhost:3583
 ```
 
-`flue logs` applies only to workflows. A direct prompt to an agent, or input accepted through `dispatch(...)`, is work in a continuing agent session rather than a workflow run. Dispatched inputs use `dispatchId` as their delivery identity.
+Pass credentials required by the workflow's `runs` middleware with `--header`. `flue logs` applies only to workflows; direct prompts and `dispatch(...)` inputs belong to continuing agent sessions instead.
 
 A workflow's `startedAt` timestamp is captured before durable admission finishes. Live observers receive `run_start` after admission setup, immediately before workflow code begins. This distinction matters when admission itself takes time: `startedAt` describes the admitted invocation's full lifetime, while `run_start` marks the beginning of live workflow execution.
 

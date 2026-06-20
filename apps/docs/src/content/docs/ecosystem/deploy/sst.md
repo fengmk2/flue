@@ -1,6 +1,7 @@
 ---
 title: Deploy Agents on SST
 description: Deploy Flue agents to AWS with SST as a long-running Fargate container service.
+lastReviewedAt: 2026-06-20
 ---
 
 [SST](https://sst.dev) is a TypeScript infrastructure-as-code framework for AWS. You describe your infrastructure as components in a single `sst.config.ts` file and deploy it with `sst deploy`. This guide deploys a Flue agent as a persistent container service, not as a Lambda function: Flue's streaming responses use a long-lived `GET /runs/:runId` connection, and its default coordinator keeps run state in memory, so it must run as an always-on process. SST's `sst.aws.Service` component runs exactly that — a container on AWS Fargate behind a load balancer.
@@ -117,7 +118,7 @@ loadBalancer: {
 
 `sst.aws.Service` also accepts a container-level `health` command (run by ECS, e.g. `{ command: ['CMD-SHELL', 'curl -f http://localhost:8080/health || exit 1'] }`) if you prefer an ECS health check.
 
-Streamed agent and workflow responses hold a long-lived `GET /runs/:runId` connection open (long-poll or SSE). Load balancer idle timeouts can cut these off; if you stream long responses, raise the idle timeout on the load balancer rather than relying on `?wait=result` for slow runs.
+Exposed workflow runs hold long-lived `GET /runs/:runId` reads open (long-poll or SSE). Load balancer idle timeouts can cut these off; for slow workflows, retain the invocation's `runId`, raise the idle timeout, and resume the run stream rather than relying on `?wait=result`. See [Workflow HTTP exports](/docs/api/workflow-api/#http-exports).
 
 ## Going further
 

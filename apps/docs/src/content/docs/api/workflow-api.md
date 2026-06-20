@@ -1,7 +1,7 @@
 ---
 title: Workflow API
 description: Reference for creating and invoking workflows with @flue/runtime.
-lastReviewedAt: 2026-06-19
+lastReviewedAt: 2026-06-20
 ---
 
 The Workflow API is exported from `@flue/runtime`.
@@ -39,16 +39,19 @@ interface WorkflowDefinition<TAction extends ActionDefinition> {
 
 Treat a Workflow Definition as an opaque identity. The generated runtime associates the exact discovered default-exported value with its module name.
 
-### Route export
+### HTTP exports
 
-HTTP routing is not a `defineWorkflow()` option. Export `route` separately from the workflow module:
+HTTP routing is not a `defineWorkflow()` option. Export either middleware separately from the workflow module:
 
 ```ts
 export default defineWorkflow({ agent, action });
-export const route: WorkflowRouteHandler = middleware;
+export const route: WorkflowRouteHandler = invokeMiddleware;
+export const runs: WorkflowRunsHandler = runMiddleware;
 ```
 
-The export enables HTTP invocation and applies middleware to the workflow's invocation and run-read routes. It does not affect CLI or ambient invocation.
+`route` enables and controls `POST /workflows/:name` only. `runs` separately exposes and controls every HTTP operation on existing runs owned by this workflow, including `GET`, `HEAD`, `?meta`, unsupported methods, and future run methods. Both are ordinary Hono middleware and may return a response or call `next()`.
+
+Without `runs`, the HTTP run resource returns the same generic `404` as an unknown or removed workflow run. Unsupported methods return `405` only after Flue resolves an exposed run and its middleware authorizes the request. Neither export affects `invoke()`, `listRuns()`, `getRun()`, schedules, or `flue run`.
 
 ## `invoke()`
 

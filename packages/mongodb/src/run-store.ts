@@ -8,6 +8,7 @@ import type {
 	RunStatus,
 	RunStore,
 } from '@flue/runtime/adapter';
+import type { WorkflowRunPointer } from '@flue/runtime';
 import {
 	clampLimit,
 	DEFAULT_LIST_LIMIT,
@@ -107,9 +108,14 @@ export class MongoRunStore implements RunStore {
 		const row = await this.c().findOne({ runId });
 		return row ? this.record(row) : null;
 	}
-	async lookupRun(runId: string): Promise<RunPointer | null> {
-		const row = await this.c().findOne({ runId });
-		return row ? pointer(row) : null;
+	async lookupRun(runId: string): Promise<WorkflowRunPointer | null> {
+		const row = await this.c().findOne(
+			{ runId },
+			{ projection: { _id: 0, runId: 1, workflowName: 1 } },
+		);
+		return row
+			? { runId: String(row.runId), workflowName: String(row.workflowName) }
+			: null;
 	}
 	async listRuns(opts: ListRunsOpts = {}): Promise<ListRunsResponse> {
 		const limit = clampLimit(opts.limit, DEFAULT_LIST_LIMIT, MAX_LIST_LIMIT);
