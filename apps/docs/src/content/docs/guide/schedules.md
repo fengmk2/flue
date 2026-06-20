@@ -1,14 +1,16 @@
 ---
 title: Schedules
-description: Run Flue agents on a schedule with Cloudflare or Node.js.
+description: Invoke Flue workflows or dispatch agent input on a schedule with Cloudflare or Node.js.
 lastReviewedAt: 2026-06-19
 ---
 
-Agents often need to run without an incoming request, such as for daily summaries, recurring reports, data synchronization, or cleanup.
+Schedules often start bounded work such as daily summaries, recurring reports, data synchronization, or cleanup. Model that work as a Workflow and admit each occurrence with `invoke(...)`. Every occurrence gets an independent `runId`, lifecycle events, and run history.
 
-Flue does not prescribe a scheduling library; nor do we build scheduling into the framework itself. Instead, use the scheduling tools provided by your deployment environment and send the resulting input to an agent with `dispatch(...)`. This guide uses Cloudflare Cron Triggers and Croner for Node.js.
+Use `dispatch(...)` instead when the schedule is an event for an intentionally continuing Agent instance. Reusing the same agent instance ID also reuses its persistent session, which is useful only when successive occurrences should share conversation state.
 
-## Scheduling on Cloudflare
+Flue does not prescribe a scheduling library. Use the scheduler provided by your deployment environment and choose Workflow invocation or Agent dispatch based on the work's lifetime.
+
+## Scheduling a Workflow on Cloudflare
 
 Add a [Cron Trigger](https://developers.cloudflare.com/workers/configuration/cron-triggers/) to your project's `wrangler.jsonc`:
 
@@ -20,18 +22,16 @@ Add a [Cron Trigger](https://developers.cloudflare.com/workers/configuration/cro
 }
 ```
 
-Then define the handler in `src/cloudflare.ts` and dispatch the scheduled input to an agent:
+Then import the discovered Workflow's default export and invoke it from `src/cloudflare.ts`:
 
 ```ts title="src/cloudflare.ts"
-import { dispatch } from '@flue/runtime';
-import dailySummary from './agents/daily-summary.ts';
+import { invoke } from '@flue/runtime';
+import dailySummary from './workflows/daily-summary.ts';
 
 export default {
   async scheduled(controller: ScheduledController) {
-    await dispatch(dailySummary, {
-      id: 'daily-summary',
+    await invoke(dailySummary, {
       input: {
-        type: 'schedule',
         prompt: 'Review recent activity and prepare the daily summary.',
         scheduledAt: new Date(controller.scheduledTime).toISOString(),
       },
@@ -40,29 +40,27 @@ export default {
 };
 ```
 
-Cron Triggers use UTC. See Cloudflare's [`scheduled()` handler](https://developers.cloudflare.com/workers/runtime-apis/handlers/scheduled/) documentation for the complete API.
+`invoke(...)` resolves after the Workflow Run is admitted and returns its `runId`; it does not wait for completion. The Workflow does not need to export an HTTP `route`. Cron Triggers use UTC. See Cloudflare's [`scheduled()` handler](https://developers.cloudflare.com/workers/runtime-apis/handlers/scheduled/) documentation for the complete API.
 
-## Scheduling on Node.js
+## Scheduling a Workflow on Node.js
 
-Node.js does not include a built-in cron scheduler, so you will need to choose an ecosystem option that fits how your application is deployed. This example uses [Croner](https://croner.56k.guru/), a popular lightweight scheduler with async callbacks, overlap protection, and timezone support.
+Node.js does not include a built-in cron scheduler, so choose an ecosystem option that fits how your application is deployed. This example uses [Croner](https://croner.56k.guru/), a lightweight scheduler with async callbacks, overlap protection, and timezone support:
 
 ```ts title="src/app.ts"
-import { dispatch } from '@flue/runtime';
+import { invoke } from '@flue/runtime';
 import { Cron } from 'croner';
-import dailySummary from './agents/daily-summary.ts';
+import dailySummary from './workflows/daily-summary.ts';
 
 new Cron(
   '0 9 * * *',
   {
     protect: true,
     timezone: 'UTC',
-    catch: (error) => console.error('Scheduled agent admission failed', error),
+    catch: (error) => console.error('Scheduled workflow admission failed', error),
   },
   async () => {
-    await dispatch(dailySummary, {
-      id: 'daily-summary',
+    await invoke(dailySummary, {
       input: {
-        type: 'schedule',
         prompt: 'Review recent activity and prepare the daily summary.',
         scheduledAt: new Date().toISOString(),
       },
@@ -71,11 +69,30 @@ new Cron(
 );
 ```
 
-For production schedules that must survive restarts or coordinate across replicas, we suggest a more persistent scheduler, such as BullMQ. An in-process scheduler like Croner only runs while that Node process is alive.
+For production schedules that must survive restarts or coordinate across replicas, use a persistent scheduler such as BullMQ. An in-process scheduler like Croner only runs while that Node process is alive.
+
+## Scheduling input for a continuing Agent
+
+Use `dispatch(...)` when scheduled occurrences should enter one persistent Agent session:
+
+```ts
+import { dispatch } from '@flue/runtime';
+import dailySummary from './agents/daily-summary.ts';
+
+await dispatch(dailySummary, {
+  id: 'daily-summary',
+  input: {
+    type: 'schedule',
+    scheduledAt: new Date().toISOString(),
+  },
+});
+```
+
+The stable `id` means every occurrence targets the same AgentInstance and conversation. Dispatched work returns a `dispatchId` and does not create Workflow Run history.
 
 ## Next steps
 
-- [Agents](/docs/guide/building-agents/) — create the agent that receives scheduled input.
-- [Workflows](/docs/guide/workflows/) — create and expose finite scheduled operations.
+- [Workflows](/docs/guide/workflows/) — define finite scheduled operations and inspect their runs.
+- [Agents](/docs/guide/building-agents/) — define a continuing agent that receives scheduled input.
 - [Cloudflare](/docs/guide/targets/cloudflare/) — configure the Cloudflare target and `cloudflare.ts` entrypoint.
 - [Node.js](/docs/guide/targets/node/) — build and operate the generated Node.js server.

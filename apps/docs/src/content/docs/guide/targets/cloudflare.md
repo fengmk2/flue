@@ -239,7 +239,7 @@ export default {
 
 Use `app.ts` for custom HTTP routes and middleware. `cloudflare.ts` must not define a default `fetch` handler because Flue keeps HTTP composition in `app.ts`.
 
-Use `cloudflare.ts` for Worker-level events such as inbound email, queues, or cron handlers that are not owned by a specific generated agent or workflow class. If one of those handlers needs to start a Flue workflow and preserve run history, invoke the mounted workflow route through the application HTTP surface instead of importing and calling the workflow's `run(...)` function directly. See [Schedules](/docs/guide/schedules/) for configuring a Cron Trigger and scheduling agents or workflows.
+Use `cloudflare.ts` for Worker-level events such as inbound email, queues, or cron handlers that are not owned by a specific generated agent or workflow class. To start a Flue Workflow from one of these handlers, import its discovered default export and call `invoke(workflow, { input })`. Ambient invocation creates a real Workflow Run, does not require an exported HTTP `route`, and bypasses route middleware. Do not call the Workflow's Action or `run(...)` callback directly. See [Schedules](/docs/guide/schedules/) for a Cron Trigger example and [Workflows](/docs/guide/workflows/#application-code) for invocation semantics.
 
 ## Reference
 
