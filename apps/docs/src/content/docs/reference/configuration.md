@@ -47,6 +47,29 @@ Flue uses the first matching source location:
 
 Build output directory. Must not be empty. Relative values loaded from a configuration file resolve from the directory containing that file, not from `root`.
 
+## Vite configuration
+
+Export `vite` from `flue.config.ts` to pass native Vite configuration to the development server. Use Vite's `defineConfig()` helper for type checking.
+
+```ts title="flue.config.ts"
+import { defineConfig as defineViteConfig } from 'vite';
+import { defineConfig } from '@flue/cli/config';
+
+export default defineConfig({
+  target: 'node',
+});
+
+export const vite = defineViteConfig({
+  server: {
+    watch: {
+      ignored: ['**/evals/results/**'],
+    },
+  },
+});
+```
+
+Flue owns the Vite project root, server mode, host, port, and its internal plugins. Other Vite options are merged into the Node and Cloudflare development servers.
+
 ## `defineConfig()`
 
 ```ts
