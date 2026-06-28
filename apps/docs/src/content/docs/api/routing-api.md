@@ -54,7 +54,22 @@ Creates a mountable Hono sub-app for Flue's public HTTP API. Routes are relative
 
 Agent routes and workflow invocation routes are available only when the corresponding module exports `route`. A workflow's existing run resources are available only when its module separately exports `runs`. Discovered channel files export a named `channel` binding whose provider-declared routes are always mounted beneath `/channels/<filename>`. Direct agent prompts and dispatched agent inputs are not runs.
 
-`POST /agents/:name/:id` accepts a JSON body of `{ message, images? }`: a required `message` string and an optional `images` array of `{ type: 'image', data, mimeType }` attachments, where `data` is base64-encoded image content (capped at 14 MiB of base64 characters per image) for vision-capable models. `POST /workflows/:name` accepts the workflow input as its JSON body.
+`POST /agents/:name/:id` accepts a JSON body of `{ message, images? }`: a required `message` string and an optional `images` array of `{ type: 'image', data, mimeType }` attachments, where `data` is base64-encoded image content (capped at 14 MiB of base64 characters per image) for vision-capable models. The prompt field is `message`, not `prompt`. `POST /workflows/:name` accepts the workflow input as its JSON body.
+
+```bash
+# Start a prompt on an HTTP-exposed agent instance.
+# :name is the agent module name; :id is any instance id you choose.
+curl -X POST http://localhost:3583/agents/assistant/main \
+  -H 'Content-Type: application/json' \
+  -d '{ "message": "Summarize the open issues." }'
+# → 202 { "streamUrl": "...", "offset": "...", "submissionId": "..." }
+
+# Block until the agent settles and return the terminal result inline.
+curl -X POST 'http://localhost:3583/agents/assistant/main?wait=result' \
+  -H 'Content-Type: application/json' \
+  -d '{ "message": "Summarize the open issues." }'
+# → 200 { "result": ..., "streamUrl": "...", "offset": "...", "submissionId": "..." }
+```
 
 `POST /agents/:name/:id` returns `202 { streamUrl, offset, submissionId }` after admission, or `200 { result, streamUrl, offset, submissionId }` with `?wait=result`; agent response headers and stream-coordinate behavior are unchanged. `POST /workflows/:name` returns `202 { runId }`, or `200 { runId, result }` with `?wait=result`. Workflow invocation responses do not include `Location` or `Stream-Next-Offset` headers. Any `?wait` value other than `result` is rejected with `400 invalid_request` on both routes.
 
