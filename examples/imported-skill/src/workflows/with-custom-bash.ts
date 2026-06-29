@@ -4,7 +4,7 @@ import { Bash, InMemoryFs } from 'just-bash';
 export const route: WorkflowRouteHandler = async (_c, next) => next();
 const agent = defineAgent(() => {
 	const fs = new InMemoryFs();
-	return { sandbox: bash(() => new Bash({ fs })), model: false };
+	return { sandbox: bash(() => new Bash({ fs })), model: 'anthropic/claude-haiku-4-5' };
 });
 
 export default defineWorkflow({

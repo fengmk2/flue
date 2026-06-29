@@ -9,7 +9,7 @@ import * as v from 'valibot';
 export const route: WorkflowRouteHandler = async (_c, next) => next();
 export const runs: WorkflowRunsHandler = async (_c, next) => next();
 
-const agent = defineAgent(() => ({ model: false }));
+const agent = defineAgent(() => ({ model: 'anthropic/claude-haiku-4-5' }));
 export default defineWorkflow({
 	agent,
 	input: v.object({ requestedAt: v.string() }),

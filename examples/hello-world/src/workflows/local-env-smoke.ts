@@ -5,7 +5,7 @@ export const route: WorkflowRouteHandler = async (_c, next) => next();
 const sentinelKey = '__FLUE_LOCAL_SMOKE_SENTINEL__';
 const agent = defineAgent(() => ({
 	sandbox: local({ env: { CUSTOM_VAR: 'visible-to-sandbox' } }),
-	model: false,
+	model: 'anthropic/claude-haiku-4-5',
 }));
 
 export default defineWorkflow({

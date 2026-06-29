@@ -78,7 +78,7 @@ Throws when the profile contains unknown fields, invalid capabilities, duplicate
 | --------------- | --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `name`          | `string`                    | Profile name. Required when selecting this profile with `session.task()`.                                                                                                   |
 | `description`   | `string`                    | Human-readable profile description.                                                                                                                                         |
-| `model`         | `string \| false`           | Default model specifier. Set to `false` to require call-level model selection.                                                                                              |
+| `model`         | `string`                    | Default model specifier.                                                                                                                                                |
 | `instructions`  | `string`                    | Instructions prepended to discovered workspace context.                                                                                                                     |
 | `skills`        | `Skill[]`                   | Registered skills available to initialized sessions.                                                                                                                        |
 | `tools`         | `ToolDefinition[]`          | Custom model-callable tools available to initialized sessions.                                                                                                              |
@@ -216,7 +216,7 @@ function defineAgent<TEnv = Record<string, any>>(
 
 Defines an agent initializer. Default-export the returned value from an `agents/<name>.ts` module to define an addressable agent, or bind it to a Workflow Definition.
 
-The initializer runs whenever a runner initializes a root harness from the agent definition. Do not treat it as a one-time constructor for a persistent agent instance id. Return a runtime config object with `model: '<provider>/<model>'`, `model: false`, or a profile with its own model field.
+The initializer runs whenever a runner initializes a root harness from the agent definition. Do not treat it as a one-time constructor for a persistent agent instance id. Return a runtime config object with `model: '<provider>/<model>'` or a profile with its own model field.
 
 #### `AgentInitializerContext`
 
@@ -231,7 +231,7 @@ The initializer runs whenever a runner initializes a root harness from the agent
 | --------------- | --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `description`   | `string`                    | Optional organizational metadata describing what this agent does. Overrides the profile description when set. Per-initialization metadata only — for a static description that surfaces in the deployment manifest and `listAgents()`, use the module-level `description` export instead. |
 | `profile`       | `AgentProfile`              | Reusable baseline profile. Agent-definition fields replace or extend profile values.                                                                                                                                                                                                         |
-| `model`         | `string \| false`           | Default model specifier. Set to `false` to require call-level model selection.                                                                                                                                                                                                            |
+| `model`         | `string`                    | Default model specifier.                                                                                                                                                                                                                                                               |
 | `instructions`  | `string`                    | Instructions prepended to discovered workspace context.                                                                                                                                                                                                                                   |
 | `skills`        | `Skill[]`                   | Additional registered skills available to initialized sessions.                                                                                                                                                                                                                           |
 | `tools`         | `ToolDefinition[]`          | Additional custom model-callable tools available to initialized sessions.                                                                                                                                                                                                                 |
@@ -539,7 +539,7 @@ interface CallHandle<T> extends Promise<T> {
 
 `prompt()`, `skill()`, `task()`, and `shell()` return awaitable call handles. Retain the handle when application code needs to cancel in-flight work. Aborting rejects the awaited operation with an `AbortError` (`DOMException`). Pass `options.signal` to merge an external abort signal with the handle's signal.
 
-Other session failures reject with typed `FlueError` subclasses such as `SessionBusyError`, `SkillNotRegisteredError`, and `ModelNotConfiguredError`, all importable from `@flue/runtime`. See the [Errors Reference](/docs/api/errors-reference/) for the full vocabulary.
+Other session failures reject with typed `FlueError` subclasses such as `SessionBusyError`, `SkillNotRegisteredError`, and `SubagentNotDeclaredError`, all importable from `@flue/runtime`. See the [Errors Reference](/docs/api/errors-reference/) for the full vocabulary.
 
 #### `FlueFs`
 
