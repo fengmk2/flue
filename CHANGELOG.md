@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+This pre-1.0 release reworks how an agent's conversation is durably recorded and communicated to clients, replacing the beta session-store model with one append-only canonical stream per instance behind a single client-facing protocol. The breaking surface is concentrated in this conversation layer; agent execution, models, tools, and workflows are unchanged. Because the persisted format changed, stores are reset-only (schema v4) with no migration from beta formats, so existing data must be cleared before upgrading. For guides and API reference, see the [documentation](https://flueframework.com/docs/).
+
 ### Breaking Changes
 
 - **Persisted storage is reset-only schema v4.** Pre-1.0 persisted stores from any other schema version are rejected and must be cleared; there is no migration from the beta session-store formats. Custom `PersistenceAdapter` implementations must provide `conversationStreamStore` and `attachmentStore` alongside execution, run, and event-stream stores, and custom `AgentSubmissionStore` implementations must add `requestSessionAbort()` and persist an `abortRequestedAt` signal for the new agent abort path. `SessionStore` and session-transcript adapter contracts are removed.
